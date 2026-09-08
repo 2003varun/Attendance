@@ -1,0 +1,4499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Attendance OS</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+:root{
+    --bg:#f4f7fb;
+    --panel:#ffffff;
+    --ink:#182230;
+    --muted:#6b7787;
+    --primary:#3157d5;
+    --green:#1fa774;
+    --amber:#e99a22;
+    --red:#dc4c64;
+    --purple:#7654d6;
+    --orange:#ed7d31;
+    --line:#e8edf4;
+    --shadow:0 12px 35px rgba(24,34,48,.08);
+}
+
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    font-family:Inter,Segoe UI,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+}
+
+.app{
+    display:grid;
+    grid-template-columns:260px 1fr;
+    min-height:100vh;
+}
+
+.side{
+    background:#111a2b;
+    color:#d9e1ef;
+    padding:24px 16px;
+    position:sticky;
+    top:0;
+    height:100vh;
+}
+
+.brand{
+    font-size:20px;
+    font-weight:800;
+    color:#fff;
+    margin:5px 10px 32px;
+}
+
+.brand span{
+    color:#8fa2ff;
+}
+
+.nav button{
+    width:100%;
+    border:0;
+    background:transparent;
+    color:#b7c3d8;
+    padding:14px 12px;
+    text-align:left;
+    border-radius:10px;
+    margin:4px 0;
+    font-size:14px;
+    cursor:pointer;
+}
+
+.nav button:hover,
+.nav button.active{
+    background:#233252;
+    color:#fff;
+}
+
+.sidefoot{
+    position:absolute;
+    bottom:22px;
+    left:26px;
+    font-size:12px;
+    color:#71809a;
+}
+
+main{
+    padding:28px;
+    overflow:hidden;
+}
+
+.top{
+    display:flex;
+    justify-content:space-between;
+    gap:20px;
+    align-items:flex-start;
+    margin-bottom:24px;
+}
+
+.top h1{
+    margin:0;
+    font-size:28px;
+}
+
+.top p{
+    margin:7px 0 0;
+    color:var(--muted);
+}
+
+.actions{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+}
+
+.btn{
+    border:0;
+    border-radius:10px;
+    padding:11px 14px;
+    font-weight:700;
+    cursor:pointer;
+    background:#eaf0ff;
+    color:#294ab7;
+}
+
+.btn.primary{
+    background:var(--primary);
+    color:#fff;
+}
+
+.btn.danger{
+    background:#fff0f2;
+    color:#b93249;
+}
+
+.page{
+    display:none;
+}
+
+.page.active{
+    display:block;
+}
+
+.cards{
+    display:grid;
+    grid-template-columns:repeat(7,minmax(130px,1fr));
+    gap:14px;
+    margin-bottom:18px;
+}
+
+.card,
+.panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:18px;
+    box-shadow:var(--shadow);
+}
+
+.label{
+    font-size:11px;
+    color:var(--muted);
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:.5px;
+}
+
+.value{
+    font-size:27px;
+    font-weight:800;
+    margin-top:8px;
+}
+
+.hint{
+    font-size:11px;
+    color:var(--muted);
+    margin-top:6px;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:1.2fr .8fr;
+    gap:18px;
+}
+
+.panel h3{
+    margin:0 0 14px;
+    font-size:16px;
+}
+
+.chart{
+    height:300px;
+    position:relative;
+}
+
+.uploadbox{
+    border:2px dashed #b9c8ea;
+    border-radius:16px;
+    padding:28px;
+    text-align:center;
+    background:#fbfcff;
+}
+
+.uploadbox.drag{
+    border-color:var(--primary);
+    background:#f2f5ff;
+}
+
+.uploadbox h3{
+    margin:0 0 8px;
+}
+
+.uploadbox p{
+    margin:0 0 15px;
+    color:var(--muted);
+    font-size:13px;
+}
+
+.fileinfo{
+    margin-top:12px;
+    font-size:13px;
+    font-weight:700;
+    color:#27633f;
+}
+
+.filters{
+    display:grid;
+    grid-template-columns:1.2fr repeat(3,1fr) auto;
+    gap:10px;
+    margin-bottom:15px;
+}
+
+.input,
+select{
+    border:1px solid #dce4ef;
+    background:#fff;
+    padding:10px 12px;
+    border-radius:9px;
+    outline:none;
+    color:var(--ink);
+    width:100%;
+}
+
+.tablewrap{
+    overflow:auto;
+    max-height:580px;
+}
+
+.reporttable{
+    border-collapse:collapse;
+    width:100%;
+    font-size:13px;
+}
+
+th{
+    position:sticky;
+    top:0;
+    background:#f7f9fc;
+    color:#647084;
+    text-align:left;
+    padding:11px;
+    border-bottom:1px solid var(--line);
+    z-index:1;
+}
+
+td{
+    padding:11px;
+    border-bottom:1px solid #eef2f6;
+    white-space:nowrap;
+}
+
+.badge{
+    padding:5px 9px;
+    border-radius:99px;
+    font-size:10px;
+    font-weight:800;
+    display:inline-block;
+}
+
+.b-green{
+    background:#e8f8f1;
+    color:#16865d;
+}
+
+.b-red{
+    background:#fff0f2;
+    color:#c63850;
+}
+
+.b-amber{
+    background:#fff6e8;
+    color:#b16e09;
+}
+
+.b-purple{
+    background:#f0edff;
+    color:#6242c5;
+}
+
+.b-orange{
+    background:#fff0e5;
+    color:#c45e1b;
+}
+
+.b-gray{
+    background:#eef2f7;
+    color:#657184;
+}
+
+.late{
+    color:#c63850;
+    font-weight:800;
+}
+
+.on-time{
+    color:#16865d;
+    font-weight:800;
+}
+
+.empty{
+    padding:35px;
+    text-align:center;
+    color:var(--muted);
+}
+
+.note{
+    font-size:12px;
+    color:var(--muted);
+    line-height:1.6;
+}
+
+.raw-preview{
+    max-height:500px;
+    overflow:auto;
+    background:#111a2b;
+    color:#d9e1ef;
+    padding:16px;
+    border-radius:12px;
+    font-family:Consolas,monospace;
+    font-size:12px;
+    white-space:pre-wrap;
+}
+
+.rulebox{
+    margin-top:18px;
+    padding:16px;
+    border-radius:12px;
+    background:#f7f9fc;
+    border:1px solid var(--line);
+}
+
+.rulebox strong{
+    color:var(--ink);
+}
+
+.rule-row{
+    display:flex;
+    justify-content:space-between;
+    gap:20px;
+    padding:8px 0;
+    border-bottom:1px solid #e8edf4;
+    font-size:13px;
+}
+
+.rule-row:last-child{
+    border-bottom:0;
+}
+
+@media(max-width:1300px){
+    .cards{
+        grid-template-columns:repeat(4,1fr);
+    }
+}
+
+@media(max-width:1200px){
+    .cards{
+        grid-template-columns:repeat(3,1fr);
+    }
+}
+
+@media(max-width:900px){
+    .app{
+        grid-template-columns:1fr;
+    }
+
+    .side{
+        position:relative;
+        height:auto;
+    }
+
+    .sidefoot{
+        display:none;
+    }
+
+    .nav{
+        display:flex;
+        overflow:auto;
+    }
+
+    .nav button{
+        min-width:max-content;
+    }
+
+    .grid{
+        grid-template-columns:1fr;
+    }
+
+    .filters{
+        grid-template-columns:1fr 1fr;
+    }
+}
+
+@media(max-width:600px){
+    main{
+        padding:16px;
+    }
+
+    .top{
+        flex-direction:column;
+    }
+
+    .cards{
+        grid-template-columns:1fr;
+    }
+
+    .filters{
+        grid-template-columns:1fr;
+    }
+}
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side">
+    <div class="brand">
+        ATTENDANCE <span>OS</span>
+    </div>
+    <div class="nav">
+        <button class="active" data-page="dashboard">
+            ▦ Dashboard
+        </button>
+        <button data-page="records">
+            ▤ Uploaded Data
+        </button>
+        <button data-page="employees">
+            ♙ Employee Report
+        </button>
+        <button data-page="dates">
+            ◫ Date-wise Report
+        </button>
+        <button data-page="raw">
+            ≡ Raw Data
+        </button>
+        <button data-page="upload">
+            ⇧ Upload File
+        </button>
+    </div>
+    <div class="sidefoot" id="sideStatus">
+        NO FILE LOADED
+    </div>
+</aside>
+<main>
+<div class="top">
+    <div>
+        <h1 id="pageTitle">
+            Attendance Dashboard
+        </h1>
+        <p id="subtitle">
+            Upload RAW TXT, CSV or Excel attendance data.
+        </p>
+    </div>
+    <div class="actions">
+        <button
+            class="btn"
+            onclick="showPage('upload')">
+            Upload File
+        </button>
+        <button
+            class="btn primary"
+            onclick="exportFilteredCSV()">
+            Export Filtered Data
+        </button>
+        <button
+            class="btn danger"
+            onclick="clearData()">
+            Clear Data
+        </button>
+    </div>
+</div>
+<!-- =====================================================
+     DASHBOARD
+===================================================== -->
+<section id="dashboard" class="page active">
+    <div class="cards">
+        <div class="card">
+            <div class="label">Employees</div>
+            <div class="value" id="kEmp">0</div>
+            <div class="hint">Unique employees</div>
+        </div>
+        <div class="card">
+            <div class="label">Full Day</div>
+            <div class="value" id="kFull">0</div>
+            <div class="hint">Full attendance</div>
+        </div>
+        <div class="card">
+            <div class="label">Morning</div>
+            <div class="value" id="kMorning">0</div>
+            <div class="hint">Morning present</div>
+        </div>
+        <div class="card">
+            <div class="label">Afternoon</div>
+            <div class="value" id="kAfternoon">0</div>
+            <div class="hint">Afternoon present</div>
+        </div>
+        <div class="card">
+            <div class="label">Absent</div>
+            <div class="value" id="kAbsent">0</div>
+            <div class="hint">No attendance</div>
+        </div>
+        <div class="card">
+            <div class="label">Morning Late</div>
+            <div class="value" id="kMorningLate">0</div>
+            <div class="hint">After 09:35 AM</div>
+        </div>
+        <div class="card">
+            <div class="label">Afternoon Late</div>
+            <div class="value" id="kAfternoonLate">0</div>
+            <div class="hint">After 02:30 PM</div>
+        </div>
+    </div>
+    <div class="grid">
+        <div class="panel">
+            <h3>
+                Attendance Distribution
+            </h3>
+            <div class="chart">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+        <div class="panel">
+            <h3>
+                Total Late Minutes by Employee
+            </h3>
+            <div class="chart">
+                <canvas id="lateChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div
+        class="panel"
+        style="margin-top:18px">
+        <h3>
+            Daily Attendance Trend
+        </h3>
+        <div class="chart">
+            <canvas id="dailyChart"></canvas>
+        </div>
+    </div>
+    <div class="panel rulebox">
+        <h3>Attendance Rules</h3>
+        <div class="rule-row">
+            <strong>Morning Check-in</strong>
+            <span>09:30 AM</span>
+        </div>
+        <div class="rule-row">
+            <strong>Morning Grace</strong>
+            <span>Until 09:35 AM</span>
+        </div>
+        <div class="rule-row">
+            <strong>Morning Late Example</strong>
+            <span>09:37 AM = 7 min late</span>
+        </div>
+        <div class="rule-row">
+            <strong>Afternoon Check-out</strong>
+            <span>02:00 PM</span>
+        </div>
+        <div class="rule-row">
+            <strong>Afternoon Check-in</strong>
+            <span>02:30 PM</span>
+        </div>
+        <div class="rule-row">
+            <strong>Afternoon Late Example</strong>
+            <span>02:32 PM = 2 min late</span>
+        </div>
+    </div>
+</section>
+<!-- =====================================================
+     RECORDS
+===================================================== -->
+
+<section id="records" class="page">
+    <div class="filters">
+        <input
+            class="input"
+            id="searchInput"
+            placeholder="Search employee ID..."
+            oninput="applyFilters()">
+        <input
+            class="input"
+            id="dateFilter"
+            type="date"
+            onchange="applyFilters()">
+        <select
+            id="statusFilter"
+            onchange="applyFilters()">
+            <option value="">
+                All Statuses
+            </option>
+            <option>
+                FULL DAY PRESENT
+            </option>
+            <option>
+                PRESENT IN THE MORNING
+            </option>
+            <option>
+                PRESENT IN THE AFTERNOON
+            </option>
+            <option>
+                ABSENT
+            </option>
+            <option>
+                SUNDAY / WEEKLY OFF
+            </option>
+        </select>
+        <select
+            id="employeeFilter"
+            onchange="applyFilters()">
+
+            <option value="">
+                All Employees
+            </option>
+        </select>
+        <button
+            class="btn"
+            onclick="resetFilters()">
+            Reset
+        </button>
+    </div>
+    <div class="panel">
+        <div
+            class="note"
+            id="filterInfo">
+            No file uploaded yet.
+        </div>
+        <div
+            class="tablewrap"
+            style="margin-top:12px">
+            <table class="reporttable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Day</th>
+                        <th>Employee ID</th>
+                        <th>Status</th>
+                        <th>First Login</th>
+                        <th>Afternoon Check-out</th>
+                        <th>Afternoon Check-in</th>
+                        <th>Last Logout</th>
+                        <th>Morning Late</th>
+                        <th>Afternoon Late</th>
+                        <th>Total Late</th>
+                        <th>Late count</th>
+                    </tr>
+                </thead>
+                <tbody id="recordRows"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+<!-- =====================================================
+     EMPLOYEE REPORT
+===================================================== -->
+<section id="employees" class="page">
+    <div class="panel tablewrap">
+        <table class="reporttable">
+            <thead>
+                <tr>
+                    <th>Employee ID</th>
+                    <th>Full Day</th>
+                    <th>Morning</th>
+                    <th>Afternoon</th>
+                    <th>Absent</th>
+                    <th>Present Equivalent</th>
+                    <th>Morning Late</th>
+                    <th>Afternoon Late</th>
+                    <th>Total Late</th>
+                </tr>
+            </thead>
+            <tbody id="employeeRows"></tbody>
+        </table>
+    </div>
+</section>
+<!-- =====================================================
+     DATE REPORT
+===================================================== -->
+<section id="dates" class="page">
+    <div class="panel tablewrap">
+        <table class="reporttable">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Day</th>
+                    <th>Full Day</th>
+                    <th>Morning</th>
+                    <th>Afternoon</th>
+                    <th>Absent</th>
+                    <th>Weekly Off</th>
+                    <th>Late Employees</th>
+                    <th>Morning Late</th>
+                    <th>Afternoon Late</th>
+                    <th>Total Late</th>
+                </tr>
+            </thead>
+            <tbody id="dateRows"></tbody>
+        </table>
+    </div>
+</section>
+<!-- =====================================================
+     RAW DATA
+===================================================== -->
+<section id="raw" class="page">
+    <div class="panel">
+        <h3>
+            Raw Attendance Data
+        </h3>
+        <div
+            class="note"
+            id="rawInfo">
+            Upload a TXT file to see raw device records.
+        </div>
+        <div
+            class="raw-preview"
+            id="rawPreview">
+No raw data loaded.
+        </div>
+    </div>
+</section>
+<!-- =====================================================
+     UPLOAD
+===================================================== -->
+<section id="upload" class="page">
+    <div class="panel">
+        <div class="uploadbox" id="dropZone">
+            <h3>
+                Upload Attendance File
+            </h3>
+            <p>
+                Upload RAW TXT, CSV or Excel (.xlsx / .xls).
+            </p>
+            <input
+                id="attendanceFile"
+                type="file"
+                accept=".txt,.csv,.xlsx,.xls,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                hidden>
+            <button
+                class="btn primary"
+                onclick="attendanceFile.click()">
+                Choose File
+            </button>
+            <div
+                class="fileinfo"
+                id="fileInfo">
+            </div>
+        </div>
+        <div
+            style="margin-top:18px"
+            class="note">
+            <b>RAW TXT example:</b>
+            <br><br>
+            <code>
+378    2026-08-31 09:27:45    1    0    3    0
+            </code>
+            <br><br>
+            Multiple punches are grouped automatically by:
+            <br>
+            <b>Employee ID + Date</b>
+        </div>
+        <div class="rulebox">
+
+            <h3>
+                Attendance Timing Rules
+            </h3>
+
+            <div class="rule-row">
+                <strong>Morning official time</strong>
+                <span>09:30 AM</span>
+            </div>
+
+            <div class="rule-row">
+                <strong>Morning grace</strong>
+                <span>09:35 AM</span>
+            </div>
+
+            <div class="rule-row">
+                <strong>Morning late calculation</strong>
+                <span>First Login − 09:30</span>
+            </div>
+
+            <div class="rule-row">
+                <strong>Afternoon checkout</strong>
+                <span>02:00 PM</span>
+            </div>
+
+            <div class="rule-row">
+                <strong>Afternoon check-in</strong>
+                <span>02:30 PM</span>
+            </div>
+
+            <div class="rule-row">
+                <strong>Afternoon late calculation</strong>
+                <span>Check-in − 02:30</span>
+            </div>
+        </div>
+    </div>
+</section>
+</main>
+</div>
+<script>
+/* =========================================================
+   GLOBAL DATA
+========================================================= */
+
+let rawData = [];
+let filteredData = [];
+let rawLines = [];
+let charts = {};
+
+/* =========================================================
+   CONFIGURATION
+========================================================= */
+
+const WORK_START =
+    9 * 60 + 30;                 // 09:30 AM
+
+const LATE_GRACE_TIME =
+    9 * 60 + 35;                 // 09:35 AM
+
+const AFTERNOON_CHECKOUT =
+    14 * 60;                     // 02:00 PM
+
+const AFTERNOON_CHECKIN =
+    14 * 60 + 30;                // 02:30 PM
+
+/* =========================================================
+   BASIC HELPERS
+========================================================= */
+function escapeHtml(v){
+    return String(v ?? "").replace(
+        /[&<>"']/g,
+        function(m){
+            return {
+                "&":"&amp;",
+                "<":"&lt;",
+                ">":"&gt;",
+                '"':"&quot;",
+                "'":"&#039;"
+            }[m];
+
+        }
+    );
+}
+
+function norm(s){
+    return String(s || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g,"");
+
+}
+function minutesToTime(m){
+
+    if(
+        m === null ||
+        m === undefined ||
+        Number.isNaN(m)
+    ){
+        return "";
+    }
+
+    return String(
+        Math.floor(m / 60)
+    ).padStart(2,"0")
+    + ":"
+    + String(
+        m % 60
+    ).padStart(2,"0");
+
+}
+
+
+function formatDate(date){
+
+    if(!date){
+        return "";
+    }
+
+    const p = date.split("-");
+
+    if(p.length !== 3){
+        return date;
+    }
+
+    const months = [
+        "JAN","FEB","MAR","APR","MAY","JUN",
+        "JUL","AUG","SEP","OCT","NOV","DEC"
+    ];
+
+    return p[2]
+        + "-"
+        + months[Number(p[1])-1]
+        + "-"
+        + p[0];
+
+}
+function getDayName(date){
+
+    if(!date){
+        return "";
+    }
+
+    const d =
+        new Date(date + "T12:00:00");
+
+    if(isNaN(d)){
+        return "";
+    }
+
+    return d.toLocaleDateString(
+        "en-US",
+        {
+            weekday:"long"
+        }
+    );
+
+}
+
+
+function getTimeFromTimestamp(timestamp){
+
+    const match =
+        String(timestamp).match(
+            /(\d{1,2}):(\d{2})(?::(\d{2}))?/
+        );
+
+    if(!match){
+        return null;
+    }
+    return Number(match[1]) * 60
+        + Number(match[2]);
+}
+function parseDateValue(v){
+
+    const s =
+        String(v || "").trim();
+
+    if(!s){
+        return "";
+    }
+
+    const iso =
+        s.match(
+            /^(\d{4})-(\d{1,2})-(\d{1,2})$/
+        );
+
+    if(iso){
+
+        return iso[1]
+            + "-"
+            + String(iso[2]).padStart(2,"0")
+            + "-"
+            + String(iso[3]).padStart(2,"0");
+
+    }
+
+    const dt =
+        new Date(s);
+
+    if(!isNaN(dt)){
+
+        return dt.getFullYear()
+            + "-"
+            + String(
+                dt.getMonth()+1
+            ).padStart(2,"0")
+            + "-"
+            + String(
+                dt.getDate()
+            ).padStart(2,"0");
+
+    }
+    return "";
+}
+/* =========================================================
+   PUNCH ANALYSIS
+========================================================= */
+function analyzePunches(punches){
+    if(
+        !punches ||
+        !punches.length
+    ){
+
+        return {
+            firstMinutes:null,
+            lastMinutes:null,
+            afternoonCheckout:null,
+            afternoonCheckin:null,
+            morningLateMinutes:0,
+            afternoonLateMinutes:0,
+            totalLateMinutes:0
+        };
+    }
+    const sorted =
+        [...punches].sort(
+            function(a,b){
+                return a.minutes - b.minutes;
+            }
+        );
+    const firstMinutes =
+        sorted[0].minutes;
+    const lastMinutes =
+        sorted[sorted.length - 1].minutes;
+    /*
+       AFTERNOON CHECK-OUT
+
+       The last punch at or before
+       02:00 PM is treated as the
+       afternoon checkout.
+
+       Example:
+
+       13:58 -> checkout
+       14:00 -> checkout
+
+       A punch after 02:00 is NOT
+       considered the checkout.
+    */
+
+    const checkoutCandidates =
+        sorted.filter(
+            function(p){
+
+                return (
+                    p.minutes <=
+                    AFTERNOON_CHECKOUT
+                );
+
+            }
+        );
+
+    const afternoonCheckoutPunch =
+        checkoutCandidates.length
+        ? checkoutCandidates[
+            checkoutCandidates.length - 1
+          ]
+        : null;
+
+    /*
+       AFTERNOON CHECK-IN
+
+       First punch at or after
+       02:30 PM.
+    */
+
+    const afternoonCheckinPunch =
+        sorted.find(
+            function(p){
+
+                return (
+                    p.minutes >=
+                    AFTERNOON_CHECKIN
+                );
+
+            }
+        );
+
+    const afternoonCheckout =
+        afternoonCheckoutPunch
+        ? afternoonCheckoutPunch.minutes
+        : null;
+
+    const afternoonCheckin =
+        afternoonCheckinPunch
+        ? afternoonCheckinPunch.minutes
+        : null;
+
+    /*
+       MORNING LATE
+
+       09:35 or earlier = 0
+
+       09:36 = 6 minutes
+       09:37 = 7 minutes
+       09:45 = 15 minutes
+
+       Calculation is always from
+       official start 09:30.
+    */
+
+    let morningLateMinutes = 0;
+
+    if(
+        firstMinutes !== null &&
+        firstMinutes > LATE_GRACE_TIME
+    ){
+
+        morningLateMinutes =
+            firstMinutes - WORK_START;
+
+    }
+
+    /*
+       AFTERNOON LATE
+
+       02:30 = 0
+
+       02:31 = 1
+       02:32 = 2
+       02:35 = 5
+    */
+
+    let afternoonLateMinutes = 0;
+
+    if(
+        afternoonCheckin !== null &&
+        afternoonCheckin >
+            AFTERNOON_CHECKIN
+    ){
+
+        afternoonLateMinutes =
+            afternoonCheckin -
+            AFTERNOON_CHECKIN;
+
+    }
+
+    return {
+
+        firstMinutes:firstMinutes,
+
+        lastMinutes:lastMinutes,
+
+        afternoonCheckout:
+            afternoonCheckout,
+
+        afternoonCheckin:
+            afternoonCheckin,
+
+        morningLateMinutes:
+            morningLateMinutes,
+
+        afternoonLateMinutes:
+            afternoonLateMinutes,
+
+        totalLateMinutes:
+            morningLateMinutes +
+            afternoonLateMinutes
+
+    };
+
+}
+
+
+/* =========================================================
+   ATTENDANCE CALCULATION
+========================================================= */
+
+function calculateAttendance(
+    firstMinutes,
+    lastMinutes,
+    date,
+    afternoonCheckout = null,
+    afternoonCheckin = null
+){
+    let status = "ABSENT";
+    /*
+       NO PUNCH
+    */
+
+    if(
+        firstMinutes === null &&
+        lastMinutes === null
+    ){
+
+        status = "ABSENT";
+
+    }
+
+    /*
+       MORNING HALF DAY
+
+       First punch before 2 PM
+       AND last punch at/before 2 PM.
+    */
+
+    else if(
+        firstMinutes < AFTERNOON_CHECKOUT &&
+        lastMinutes <= AFTERNOON_CHECKOUT
+    ){
+
+        status =
+            "PRESENT IN THE MORNING";
+
+    }
+    /*
+       AFTERNOON HALF DAY
+
+       First punch at or after
+       2:30 PM.
+    */
+
+    else if(
+        firstMinutes >= AFTERNOON_CHECKIN
+    ){
+
+        status =
+            "PRESENT IN THE AFTERNOON";
+
+    }
+
+    /*
+       FULL DAY
+
+       Morning attendance + afternoon
+       attendance.
+    */
+
+    else if(
+        firstMinutes < AFTERNOON_CHECKOUT &&
+        lastMinutes > AFTERNOON_CHECKIN
+    ){
+
+        status =
+            "FULL DAY PRESENT";
+
+    }
+
+    else{
+
+        status =
+            "FULL DAY PRESENT";
+
+    }
+    /*
+       SUNDAY / WEEKLY OFF
+    */
+    if(date){
+
+        const dt =
+            new Date(
+                date + "T12:00:00"
+            );
+
+        if(
+            dt.getDay() === 0 &&
+            status === "ABSENT"
+        ){
+
+            status =
+                "SUNDAY / WEEKLY OFF";
+
+        }
+
+    }
+
+    /*
+       MORNING LATE
+    */
+    let morningLateMinutes = 0;
+
+    if(
+        firstMinutes !== null &&
+        firstMinutes > LATE_GRACE_TIME &&
+        status !== "SUNDAY / WEEKLY OFF"
+    ){
+
+        morningLateMinutes =
+            firstMinutes -
+            WORK_START;
+    }
+
+    /*
+       AFTERNOON LATE
+    */
+    let afternoonLateMinutes = 0;
+    if(
+        afternoonCheckin !== null &&
+        afternoonCheckin >
+            AFTERNOON_CHECKIN &&
+        status !== "SUNDAY / WEEKLY OFF"
+    ){
+
+        afternoonLateMinutes =
+            afternoonCheckin -
+            AFTERNOON_CHECKIN;
+
+    }
+    const totalLateMinutes =
+        morningLateMinutes +
+        afternoonLateMinutes;
+
+      let lateCount = 0;
+
+if(morningLateMinutes > 0){
+    lateCount++;
+}
+
+if(afternoonLateMinutes > 0){
+    lateCount++;
+}
+
+    return {
+
+        status:status,
+
+
+        morningLateMinutes:
+            morningLateMinutes,
+
+        afternoonLateMinutes:
+            afternoonLateMinutes,
+
+        lateMinutes:
+            totalLateMinutes,
+          lateCount:lateCount
+
+    };
+
+}
+
+/* =========================================================
+   RAW TXT PARSER
+========================================================= */
+
+function parseRawTxt(text){
+
+    const lines =
+        text
+        .replace(/\r\n/g,"\n")
+        .replace(/\r/g,"\n")
+        .split("\n");
+    rawLines = lines;
+
+    const punches = [];
+
+    lines.forEach(
+        function(line,index){
+
+            const clean =
+                line.trim();
+
+            if(!clean){
+                return;
+            }
+            /*
+               Expected:
+
+               378  2026-08-31 09:27:45  1 0 3 0
+            */
+            const match =
+                clean.match(
+                    /^\s*(\d+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*(.*)$/
+                );
+
+            if(!match){
+                return;
+            }
+            const employeeId =
+                match[1];
+            const date =
+                match[2];
+            const time =
+                match[3];
+            const minutes =
+                getTimeFromTimestamp(time);
+            if(minutes === null){
+                return;
+            }
+            punches.push({
+                employeeId:employeeId,
+                date:date,
+                time:time,
+                minutes:minutes,
+                line:index + 1
+            });
+        }
+    );
+    const grouped =
+        new Map();
+    punches.forEach(
+        function(p){
+
+            const key =
+                p.employeeId +
+                "|" +
+                p.date;
+
+
+            if(!grouped.has(key)){
+
+                grouped.set(
+                    key,
+                    []
+                );
+            }
+
+            grouped
+                .get(key)
+                .push(p);
+
+        }
+    );
+
+    rawData =
+        Array.from(
+            grouped.entries()
+        )
+        .map(
+            function(entry,index){
+
+                const key = entry[0];
+                const list = entry[1];
+
+                list.sort(
+                    function(a,b){
+
+                        return (
+                            a.minutes -
+                            b.minutes
+                        );
+                    }
+                );
+                const parts =
+                    key.split("|");
+
+
+                const employeeId =
+                    parts[0];
+
+
+                const date =
+                    parts[1];
+
+
+                const analysis =
+                    analyzePunches(list);
+
+
+                const result =
+                    calculateAttendance(
+                        analysis.firstMinutes,
+                        analysis.lastMinutes,
+                        date,
+                        analysis.afternoonCheckout,
+                        analysis.afternoonCheckin
+                    );
+
+
+                return {
+
+    _index:
+        index + 1,
+
+    date:
+        date,
+
+    day:
+        getDayName(date),
+
+    employeeId:
+        employeeId,
+
+    employeeName:
+        "",
+
+    status:
+        result.status,
+
+
+    firstLogin:
+        minutesToTime(
+            analysis.firstMinutes
+        ),
+
+
+    afternoonCheckout:
+        analysis.afternoonCheckout !== null
+            ? minutesToTime(
+                analysis.afternoonCheckout
+            )
+            : "",
+
+
+    afternoonCheckin:
+        analysis.afternoonCheckin !== null
+            ? minutesToTime(
+                analysis.afternoonCheckin
+            )
+            : "",
+
+
+    lastLogout:
+        analysis.lastMinutes !== null
+            ? minutesToTime(
+                analysis.lastMinutes
+            )
+            : "",
+
+
+    /* MORNING LATE MINUTES */
+
+    morningLateMinutes:
+        result.morningLateMinutes,
+
+
+    /* AFTERNOON LATE MINUTES */
+
+    afternoonLateMinutes:
+        result.afternoonLateMinutes,
+
+
+    /* TOTAL LATE MINUTES */
+
+    lateMinutes:
+        result.lateMinutes,
+
+
+    /* LATE COUNT: 0, 1 OR 2 */
+
+    lateCount:
+        result.lateCount,
+
+
+    lateFine:
+        0,
+
+
+    punchTimes:
+        list.map(
+            function(x){
+                return x.time;
+            }
+        ).join(", ")
+
+};
+
+            }
+        )
+        .sort(
+            function(a,b){
+
+                return (
+                    a.date.localeCompare(
+                        b.date
+                    )
+                    ||
+                    a.employeeId.localeCompare(
+                        b.employeeId
+                    )
+                );
+
+            }
+        );
+
+
+    filteredData =
+        [...rawData];
+
+
+    localStorage.setItem(
+        "attendanceRawTXTDataV4",
+        JSON.stringify(rawData)
+    );
+
+
+    rawPreview.textContent =
+        lines
+        .slice(0,500)
+        .join("\n")
+        ||
+        "No valid raw data found.";
+
+
+    rawInfo.textContent =
+        punches.length
+        + " raw punches found • "
+        + rawData.length
+        + " employee-date attendance records created.";
+
+
+    return rawData;
+
+}
+
+
+/* =========================================================
+   CSV PARSER
+========================================================= */
+
+function csvParse(text){
+
+    const rows = [];
+
+    let row = [];
+
+    let cell = "";
+
+    let q = false;
+
+
+    for(
+        let i=0;
+        i<text.length;
+        i++
+    ){
+
+        const c =
+            text[i];
+
+        const n =
+            text[i+1];
+
+
+        if(c === '"'){
+
+            if(
+                q &&
+                n === '"'
+            ){
+
+                cell += '"';
+
+                i++;
+
+            }
+
+            else{
+
+                q = !q;
+
+            }
+
+        }
+
+
+        else if(
+            c === "," &&
+            !q
+        ){
+
+            row.push(cell);
+
+            cell = "";
+
+        }
+
+
+        else if(
+            (
+                c === "\n" ||
+                c === "\r"
+            ) &&
+            !q
+        ){
+
+            if(
+                c === "\r" &&
+                n === "\n"
+            ){
+
+                i++;
+
+            }
+
+
+            row.push(cell);
+
+
+            if(
+                row.some(
+                    function(x){
+                        return (
+                            x.trim() !== ""
+                        );
+                    }
+                )
+            ){
+
+                rows.push(row);
+
+            }
+
+
+            row = [];
+
+            cell = "";
+
+        }
+
+
+        else{
+
+            cell += c;
+
+        }
+
+    }
+
+
+    if(
+        cell.length ||
+        row.length
+    ){
+
+        row.push(cell);
+
+        rows.push(row);
+
+    }
+
+
+    return rows;
+
+}
+
+
+function pick(obj,...names){
+
+    for(
+        const n of names
+    ){
+
+        if(
+            obj[n] !== undefined &&
+            obj[n] !== ""
+        ){
+
+            return obj[n];
+
+        }
+
+    }
+
+    return "";
+
+}
+
+
+function canonicalStatus(v){
+
+    const s =
+        String(v || "")
+        .trim()
+        .toUpperCase();
+
+
+    if(
+        s.includes(
+            "PRESENT IN THE MORNING"
+        ) ||
+        s.includes("MORNING")
+    ){
+
+        return "PRESENT IN THE MORNING";
+
+    }
+
+
+    if(
+        s.includes(
+            "PRESENT IN THE AFTERNOON"
+        ) ||
+        s.includes("AFTERNOON") ||
+        s.includes("NOON")
+    ){
+
+        return "PRESENT IN THE AFTERNOON";
+
+    }
+
+
+    if(
+        s.includes("FULL") ||
+        s === "P" ||
+        s === "PRESENT"
+    ){
+
+        return "FULL DAY PRESENT";
+
+    }
+
+
+    if(
+        s.includes("ABSENT") ||
+        s === "A"
+    ){
+
+        return "ABSENT";
+
+    }
+
+
+    if(
+        s.includes("SUNDAY") ||
+        s.includes("WEEKLY OFF") ||
+        s === "OFF"
+    ){
+
+        return "SUNDAY / WEEKLY OFF";
+
+    }
+
+
+    return s || "UNKNOWN";
+
+}
+
+
+/* =========================================================
+   CSV LOAD
+========================================================= */
+
+function loadCSV(file){
+
+    const reader =
+        new FileReader();
+
+
+    reader.onload =
+        function(e){
+
+            const rows =
+                csvParse(
+                    e.target.result
+                );
+
+
+            if(rows.length < 2){
+
+                alert(
+                    "The CSV file has no data."
+                );
+
+                return;
+
+            }
+
+
+            const headers =
+                rows[0].map(
+                    function(h,i){
+
+                        return (
+                            norm(h) ||
+                            "col" + i
+                        );
+
+                    }
+                );
+
+
+            rawData =
+                rows.slice(1)
+                .map(
+                    function(arr,index){
+
+                        const o = {};
+
+
+                        headers.forEach(
+                            function(h,i){
+
+                                o[h] =
+                                    String(
+                                        arr[i] ??
+                                        ""
+                                    ).trim();
+
+                            }
+                        );
+
+
+                        const date =
+                            parseDateValue(
+                                pick(
+                                    o,
+                                    "date"
+                                )
+                            );
+
+
+                        let firstLogin =
+                            pick(
+                                o,
+                                "firstlogin",
+                                "login",
+                                "checkin"
+                            );
+
+
+                        let lastLogout =
+                            pick(
+                                o,
+                                "lastlogout",
+                                "logout",
+                                "checkout"
+                            );
+
+
+                        let afternoonCheckout =
+                            pick(
+                                o,
+                                "afternooncheckout",
+                                "afternooncheck-out",
+                                "checkoutafternoon"
+                            );
+
+
+                        let afternoonCheckin =
+                            pick(
+                                o,
+                                "afternooncheckin",
+                                "afternooncheck-in",
+                                "checkinafternoon"
+                            );
+
+
+                        const firstMinutes =
+                            getTimeFromTimestamp(
+                                firstLogin
+                            );
+
+
+                        const lastMinutes =
+                            getTimeFromTimestamp(
+                                lastLogout
+                            );
+
+
+                        let afternoonCheckoutMinutes =
+                            getTimeFromTimestamp(
+                                afternoonCheckout
+                            );
+
+
+                        let afternoonCheckinMinutes =
+                            getTimeFromTimestamp(
+                                afternoonCheckin
+                            );
+
+
+                        if(
+                            afternoonCheckoutMinutes === null
+                        ){
+
+                            afternoonCheckoutMinutes =
+                                null;
+
+                        }
+
+
+                        if(
+                            afternoonCheckinMinutes === null
+                        ){
+
+                            afternoonCheckinMinutes =
+                                null;
+
+                        }
+
+
+                        const result =
+                            calculateAttendance(
+                                firstMinutes,
+                                lastMinutes,
+                                date,
+                                afternoonCheckoutMinutes,
+                                afternoonCheckinMinutes
+                            );
+
+
+                        return {
+
+                            _index:
+                                index + 2,
+
+                            date:
+                                date,
+
+                            day:
+                                pick(
+                                    o,
+                                    "day"
+                                ) ||
+                                getDayName(date),
+
+                            employeeId:
+                                pick(
+                                    o,
+                                    "employeeid",
+                                    "empid",
+                                    "employee"
+                                ),
+
+                            employeeName:
+                                pick(
+                                    o,
+                                    "employeename",
+                                    "name"
+                                ),
+
+                            status:
+                                result.status,
+
+                            attendanceValue:
+                                result.attendanceValue,
+
+                            firstLogin:
+                                firstLogin,
+
+                            afternoonCheckout:
+                                afternoonCheckout,
+
+                            afternoonCheckin:
+                                afternoonCheckin,
+
+                            lastLogout:
+                                lastLogout,
+
+                            punchCount:
+                                Number(
+                                    pick(
+                                        o,
+                                        "punchcount"
+                                    )
+                                ) || 0,
+
+                            morningLateMinutes:
+                                result.morningLateMinutes,
+
+                            afternoonLateMinutes:
+                                result.afternoonLateMinutes,
+
+                            lateMinutes:
+                                result.lateMinutes,
+
+                            lateFine:
+                                Number(
+                                    pick(
+                                        o,
+                                        "latefineinr",
+                                        "latefine",
+                                        "fine"
+                                    )
+                                ) || 0
+
+                        };
+
+                    }
+                )
+                .filter(
+                    function(x){
+
+                        return (
+                            x.employeeId ||
+                            x.employeeName
+                        );
+
+                    }
+                );
+
+
+            filteredData =
+                [...rawData];
+
+
+            localStorage.setItem(
+                "attendanceRawTXTDataV4",
+                JSON.stringify(rawData)
+            );
+
+
+            fileInfo.textContent =
+                "Loaded CSV: "
+                + file.name
+                + " • "
+                + rawData.length
+                + " records";
+
+
+            sideStatus.textContent =
+                file.name
+                .slice(0,22)
+                .toUpperCase()
+                + " LOADED";
+
+
+            populateEmployees();
+
+            resetFilters();
+
+            renderAll();
+
+            showPage("dashboard");
+
+        };
+
+
+    reader.readAsText(file);
+
+}
+
+
+/* =========================================================
+   EXCEL DATE
+========================================================= */
+
+function excelDate(v){
+
+    if(
+        v === null ||
+        v === undefined ||
+        String(v).trim() === ""
+    ){
+
+        return "";
+
+    }
+
+
+    if(
+        v instanceof Date &&
+        !isNaN(v.getTime())
+    ){
+
+        return v.getFullYear()
+            + "-"
+            + String(
+                v.getMonth()+1
+            ).padStart(2,"0")
+            + "-"
+            + String(
+                v.getDate()
+            ).padStart(2,"0");
+
+    }
+
+
+    if(typeof v === "number"){
+
+        if(
+            !Number.isFinite(v) ||
+            v < 1
+        ){
+
+            return "";
+
+        }
+
+
+        const p =
+            XLSX.SSF.parse_date_code(
+                Math.floor(v)
+            );
+
+
+        if(
+            p &&
+            p.y >= 2000 &&
+            p.y <= 2100
+        ){
+
+            return p.y
+                + "-"
+                + String(p.m).padStart(2,"0")
+                + "-"
+                + String(p.d).padStart(2,"0");
+
+        }
+
+    }
+
+
+    return parseDateValue(v);
+
+}
+
+
+/* =========================================================
+   TIME PARSER FOR EXCEL
+========================================================= */
+
+function timeToMinutes(v){
+
+    if(
+        v === null ||
+        v === undefined ||
+        v === ""
+    ){
+
+        return null;
+
+    }
+
+
+    if(v instanceof Date){
+
+        return (
+            v.getHours() * 60 +
+            v.getMinutes()
+        );
+
+    }
+
+
+    if(typeof v === "number"){
+
+        if(
+            v >= 0 &&
+            v < 1
+        ){
+
+            return Math.round(
+                v * 24 * 60
+            );
+
+        }
+
+
+        const p =
+            XLSX.SSF.parse_date_code(v);
+
+
+        if(p){
+
+            return (
+                p.H * 60 +
+                p.M
+            );
+
+        }
+
+    }
+
+
+    return getTimeFromTimestamp(v);
+
+}
+
+
+/* =========================================================
+   EXCEL SHEET
+========================================================= */
+
+function sheetRowsToObjects(ws){
+
+    const rows =
+        XLSX.utils.sheet_to_json(
+            ws,
+            {
+                header:1,
+                defval:"",
+                raw:true
+            }
+        );
+
+
+    if(!rows.length){
+        return [];
+    }
+
+
+    const headers =
+        rows[0].map(
+            function(h,i){
+
+                return (
+                    norm(h) ||
+                    "col" + i
+                );
+
+            }
+        );
+
+
+    return rows
+        .slice(1)
+        .map(
+            function(arr){
+
+                const o = {};
+
+
+                headers.forEach(
+                    function(h,i){
+
+                        o[h] =
+                            arr[i] ?? "";
+
+                    }
+                );
+
+
+                return o;
+
+            }
+        );
+
+}
+
+
+/* =========================================================
+   EXCEL LOAD
+========================================================= */
+
+function loadExcel(file){
+
+    const reader =
+        new FileReader();
+
+
+    reader.onload =
+        function(e){
+
+            try{
+
+                const wb =
+                    XLSX.read(
+                        new Uint8Array(
+                            e.target.result
+                        ),
+                        {
+                            type:"array",
+                            cellDates:true
+                        }
+                    );
+
+
+                const punchName =
+                    wb.SheetNames.find(
+                        n =>
+                            norm(n) ===
+                            "punchingtime"
+                    )
+                    ||
+                    wb.SheetNames.find(
+                        n =>
+                            norm(n)
+                            .includes("punch")
+                    );
+
+
+                if(!punchName){
+
+                    alert(
+                        "Could not find the Punching Time sheet."
+                    );
+
+                    return;
+
+                }
+
+
+                const punch =
+                    sheetRowsToObjects(
+                        wb.Sheets[punchName]
+                    );
+
+
+                rawData =
+                    punch.map(
+                        function(o,index){
+
+                            const employeeId =
+                                String(
+                                    pick(
+                                        o,
+                                        "empid",
+                                        "employeeid",
+                                        "id"
+                                    )
+                                ).trim();
+
+
+                            const employeeName =
+                                String(
+                                    pick(
+                                        o,
+                                        "name",
+                                        "nameofemployee",
+                                        "employeename"
+                                    )
+                                ).trim();
+
+
+                            const date =
+                                excelDate(
+                                    pick(
+                                        o,
+                                        "date"
+                                    )
+                                );
+
+
+                            const logins = [];
+
+                            const logouts = [];
+
+
+                            for(
+                                let n=1;
+                                n<=10;
+                                n++
+                            ){
+
+                                const li =
+                                    n === 1
+                                    ? o["login"]
+                                    : o[
+                                        "login" + n
+                                    ];
+
+
+                                const lo =
+                                    n === 1
+                                    ? o["logout"]
+                                    : o[
+                                        "logout" + n
+                                    ];
+
+
+                                const a =
+                                    timeToMinutes(li);
+
+
+                                const b =
+                                    timeToMinutes(lo);
+
+
+                                if(a !== null){
+
+                                    logins.push(a);
+
+                                }
+
+
+                                if(b !== null){
+
+                                    logouts.push(b);
+
+                                }
+
+                            }
+
+
+                            const first =
+                                logins.length
+                                ? Math.min(
+                                    ...logins
+                                )
+                                : null;
+
+
+                            const last =
+                                logouts.length
+                                ? Math.max(
+                                    ...logouts
+                                )
+                                : null;
+
+
+                            /*
+                               Find afternoon checkout
+                            */
+
+                            const checkoutCandidates =
+                                [
+                                    ...logins,
+                                    ...logouts
+                                ]
+                                .filter(
+                                    function(m){
+
+                                        return (
+                                            m <=
+                                            AFTERNOON_CHECKOUT
+                                        );
+
+                                    }
+                                );
+
+
+                            const afternoonCheckout =
+                                checkoutCandidates.length
+                                ? Math.max(
+                                    ...checkoutCandidates
+                                )
+                                : null;
+
+
+                            /*
+                               Find afternoon check-in
+                            */
+
+                            const checkinCandidates =
+                                [
+                                    ...logins,
+                                    ...logouts
+                                ]
+                                .filter(
+                                    function(m){
+
+                                        return (
+                                            m >=
+                                            AFTERNOON_CHECKIN
+                                        );
+
+                                    }
+                                );
+
+
+                            const afternoonCheckin =
+                                checkinCandidates.length
+                                ? Math.min(
+                                    ...checkinCandidates
+                                )
+                                : null;
+
+
+                            const result =
+                                calculateAttendance(
+                                    first,
+                                    last,
+                                    date,
+                                    afternoonCheckout,
+                                    afternoonCheckin
+                                );
+
+
+                            return {
+
+                                _index:
+                                    index + 2,
+
+                                date:
+                                    date,
+
+                                day:
+                                    getDayName(date),
+
+                                employeeId:
+                                    employeeId,
+
+                                employeeName:
+                                    employeeName,
+
+                                status:
+                                    result.status,
+
+                                attendanceValue:
+                                    result.attendanceValue,
+
+                                firstLogin:
+                                    minutesToTime(first),
+
+                                afternoonCheckout:
+                                    minutesToTime(
+                                        afternoonCheckout
+                                    ),
+
+                                afternoonCheckin:
+                                    minutesToTime(
+                                        afternoonCheckin
+                                    ),
+
+                                lastLogout:
+                                    minutesToTime(last),
+
+                                punchCount:
+                                    logins.length +
+                                    logouts.length,
+
+                                morningLateMinutes:
+                                    result.morningLateMinutes,
+
+                                afternoonLateMinutes:
+                                    result.afternoonLateMinutes,
+
+                                lateMinutes:
+                                    result.lateMinutes,
+
+                                lateFine:
+                                    0
+
+                            };
+
+                        }
+                    )
+                    .filter(
+                        function(x){
+
+                            return (
+                                (
+                                    x.employeeId ||
+                                    x.employeeName
+                                )
+                                &&
+                                x.date
+                            );
+
+                        }
+                    );
+
+
+                filteredData =
+                    [...rawData];
+
+
+                localStorage.setItem(
+                    "attendanceRawTXTDataV4",
+                    JSON.stringify(rawData)
+                );
+
+
+                fileInfo.textContent =
+                    "Loaded Excel: "
+                    + file.name
+                    + " • "
+                    + rawData.length
+                    + " records";
+
+
+                sideStatus.textContent =
+                    file.name
+                    .slice(0,22)
+                    .toUpperCase()
+                    + " LOADED";
+
+
+                populateEmployees();
+
+                resetFilters();
+
+                renderAll();
+
+                showPage("dashboard");
+
+            }
+
+            catch(err){
+
+                console.error(err);
+
+                alert(
+                    "Could not read this Excel file. Please check its format."
+                );
+
+            }
+
+        };
+
+
+    reader.readAsArrayBuffer(file);
+
+}
+
+
+/* =========================================================
+   FILE UPLOAD
+========================================================= */
+
+const attendanceFile =
+    document.getElementById(
+        "attendanceFile"
+    );
+
+
+attendanceFile.addEventListener(
+    "change",
+    function(e){
+
+        const file =
+            e.target.files[0];
+
+
+        if(!file){
+            return;
+        }
+
+
+        handleFile(file);
+
+    }
+);
+
+
+function handleFile(file){
+
+    const name =
+        file.name.toLowerCase();
+
+
+    if(name.endsWith(".txt")){
+
+        const reader =
+            new FileReader();
+
+
+        reader.onload =
+            function(e){
+
+                parseRawTxt(
+                    e.target.result
+                );
+
+
+                fileInfo.textContent =
+                    "Loaded RAW TXT: "
+                    + file.name
+                    + " • "
+                    + rawData.length
+                    + " attendance records";
+
+
+                sideStatus.textContent =
+                    file.name
+                    .slice(0,22)
+                    .toUpperCase()
+                    + " LOADED";
+
+
+                populateEmployees();
+
+                resetFilters();
+
+                renderAll();
+
+                showPage("dashboard");
+
+            };
+
+
+        reader.readAsText(file);
+
+    }
+
+
+    else if(name.endsWith(".csv")){
+
+        loadCSV(file);
+
+    }
+
+
+    else if(
+        name.endsWith(".xlsx") ||
+        name.endsWith(".xls")
+    ){
+
+        loadExcel(file);
+
+    }
+
+
+    else{
+
+        alert(
+            "Please upload TXT, CSV, XLSX or XLS."
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   DRAG & DROP
+========================================================= */
+
+const dz =
+    document.getElementById(
+        "dropZone"
+    );
+
+
+["dragenter","dragover"]
+.forEach(
+    function(ev){
+
+        dz.addEventListener(
+            ev,
+            function(e){
+
+                e.preventDefault();
+
+                dz.classList.add(
+                    "drag"
+                );
+
+            }
+        );
+
+    }
+);
+
+
+["dragleave","drop"]
+.forEach(
+    function(ev){
+
+        dz.addEventListener(
+            ev,
+            function(e){
+
+                e.preventDefault();
+
+                dz.classList.remove(
+                    "drag"
+                );
+
+            }
+        );
+
+    }
+);
+
+
+dz.addEventListener(
+    "drop",
+    function(e){
+
+        const file =
+            e.dataTransfer.files[0];
+
+
+        if(file){
+
+            handleFile(file);
+
+        }
+
+    }
+);
+
+
+/* =========================================================
+   FILTERS
+========================================================= */
+
+function populateEmployees(){
+
+    const current =
+        employeeFilter.value;
+
+
+    const employees =
+        [
+            ...new Map(
+                rawData.map(
+                    function(x){
+
+                        const key =
+                            x.employeeId ||
+                            x.employeeName;
+
+
+                        return [
+                            key,
+                            {
+                                id:
+                                    x.employeeId,
+
+                                name:
+                                    x.employeeName ||
+                                    x.employeeId
+                            }
+                        ];
+
+                    }
+                )
+            ).values()
+        ]
+        .sort(
+            function(a,b){
+
+                return a.name.localeCompare(
+                    b.name
+                );
+
+            }
+        );
+
+
+    employeeFilter.innerHTML =
+        '<option value="">All Employees</option>'
+        +
+        employees.map(
+            function(e){
+
+                return (
+                    '<option value="' +
+                    escapeHtml(e.id) +
+                    '">' +
+                    escapeHtml(e.name) +
+                    ' (' +
+                    escapeHtml(e.id) +
+                    ')</option>'
+                );
+
+            }
+        ).join("");
+
+
+    employeeFilter.value =
+        current;
+
+}
+
+
+function applyFilters(){
+
+    const q =
+        searchInput.value.toLowerCase();
+
+
+    const date =
+        dateFilter.value;
+
+
+    const status =
+        statusFilter.value;
+
+
+    const emp =
+        employeeFilter.value;
+
+
+    filteredData =
+        rawData.filter(
+            function(x){
+
+                return (
+
+                    (
+                        !q ||
+                        String(
+                            x.employeeId
+                            + " "
+                            + x.employeeName
+                        )
+                        .toLowerCase()
+                        .includes(q)
+                    )
+
+                    &&
+
+                    (
+                        !date ||
+                        x.date === date
+                    )
+
+                    &&
+
+                    (
+                        !status ||
+                        x.status === status
+                    )
+
+                    &&
+
+                    (
+                        !emp ||
+                        x.employeeId === emp
+                    )
+
+                );
+
+            }
+        );
+
+
+    renderAll();
+
+}
+
+
+function resetFilters(){
+
+    searchInput.value = "";
+
+    dateFilter.value = "";
+
+    statusFilter.value = "";
+
+    employeeFilter.value = "";
+
+    filteredData =
+        [...rawData];
+
+
+    renderAll();
+
+}
+
+
+/* =========================================================
+   BADGE
+========================================================= */
+
+function badge(status){
+
+    let cls =
+        "b-gray";
+
+
+    if(
+        status ===
+        "FULL DAY PRESENT"
+    ){
+
+        cls =
+            "b-green";
+
+    }
+
+    else if(
+        status ===
+        "PRESENT IN THE MORNING"
+    ){
+
+        cls =
+            "b-amber";
+
+    }
+
+    else if(
+        status ===
+        "PRESENT IN THE AFTERNOON"
+    ){
+
+        cls =
+            "b-purple";
+
+    }
+
+    else if(
+        status ===
+        "ABSENT"
+    ){
+
+        cls =
+            "b-red";
+
+    }
+
+
+    return (
+        '<span class="badge '
+        + cls
+        + '">'
+        + escapeHtml(status)
+        + '</span>'
+    );
+
+}
+
+
+/* =========================================================
+   STATS
+========================================================= */
+
+function stats(
+    data = filteredData
+){
+
+    const count =
+        function(status){
+
+            return data.filter(
+                x =>
+                    x.status === status
+            ).length;
+
+        };
+
+
+    return {
+
+        emp:
+            new Set(
+                data.map(
+                    x =>
+                        x.employeeId ||
+                        x.employeeName
+                )
+            ).size,
+
+        full:
+            count(
+                "FULL DAY PRESENT"
+            ),
+
+        morning:
+            count(
+                "PRESENT IN THE MORNING"
+            ),
+
+        afternoon:
+            count(
+                "PRESENT IN THE AFTERNOON"
+            ),
+
+        absent:
+            count(
+                "ABSENT"
+            ),
+
+        morningLate:
+            data.reduce(
+                (
+                    sum,x
+                ) =>
+                    sum +
+                    (
+                        x.morningLateMinutes ||
+                        0
+                    ),
+                0
+            ),
+
+        afternoonLate:
+            data.reduce(
+                (
+                    sum,x
+                ) =>
+                    sum +
+                    (
+                        x.afternoonLateMinutes ||
+                        0
+                    ),
+                0
+            ),
+
+        late:
+            data.reduce(
+                (
+                    sum,x
+                ) =>
+                    sum +
+                    (
+                        x.lateMinutes ||
+                        0
+                    ),
+                0
+            )
+
+    };
+
+}
+
+
+/* =========================================================
+   DASHBOARD
+========================================================= */
+
+function renderDashboard(){
+
+    const s =
+        stats();
+
+
+    kEmp.textContent =
+        s.emp;
+
+
+    kFull.textContent =
+        s.full;
+
+
+    kMorning.textContent =
+        s.morning;
+
+
+    kAfternoon.textContent =
+        s.afternoon;
+
+
+    kAbsent.textContent =
+        s.absent;
+
+
+    kMorningLate.textContent =
+        s.morningLate;
+
+
+    kAfternoonLate.textContent =
+        s.afternoonLate;
+
+
+    Object.values(charts)
+        .forEach(
+            function(c){
+
+                if(c){
+                    c.destroy();
+                }
+
+            }
+        );
+
+
+    charts = {};
+
+
+    if(!filteredData.length){
+        return;
+    }
+
+
+    charts.status =
+        new Chart(
+            statusChart,
+            {
+
+                type:"doughnut",
+
+                data:{
+
+                    labels:[
+                        "Full Day",
+                        "Present Morning",
+                        "Present Afternoon",
+                        "Absent"
+                    ],
+
+                    datasets:[{
+
+                        data:[
+                            s.full,
+                            s.morning,
+                            s.afternoon,
+                            s.absent
+                        ],
+
+                        backgroundColor:[
+                            "#1fa774",
+                            "#e99a22",
+                            "#7654d6",
+                            "#dc4c64"
+                        ]
+
+                    }]
+
+                },
+
+                options:{
+                    responsive:true,
+                    maintainAspectRatio:false
+                }
+
+            }
+        );
+
+
+    /*
+       LATE BY EMPLOYEE
+    */
+
+    const lateMap =
+        new Map();
+
+
+    filteredData.forEach(
+        function(x){
+
+            const key =
+                x.employeeId ||
+                x.employeeName;
+
+
+            if(!lateMap.has(key)){
+
+                lateMap.set(
+                    key,
+                    {
+                        name:
+                            x.employeeName ||
+                            x.employeeId,
+
+                        mins:0
+                    }
+                );
+
+            }
+
+
+            lateMap.get(key).mins +=
+                x.lateMinutes || 0;
+
+        }
+    );
+
+
+    const lateEmployees =
+        [
+            ...lateMap.values()
+        ]
+        .sort(
+            function(a,b){
+
+                return (
+                    b.mins -
+                    a.mins
+                );
+
+            }
+        );
+
+
+    charts.late =
+        new Chart(
+            lateChart,
+            {
+
+                type:"bar",
+
+                data:{
+
+                    labels:
+                        lateEmployees.map(
+                            x =>
+                                x.name
+                        ),
+
+                    datasets:[{
+
+                        label:
+                            "Total Late Minutes",
+
+                        data:
+                            lateEmployees.map(
+                                x =>
+                                    x.mins
+                            ),
+
+                        backgroundColor:
+                            "#3157d5"
+
+                    }]
+
+                },
+
+                options:{
+
+                    responsive:true,
+
+                    maintainAspectRatio:false,
+
+                    indexAxis:"y",
+
+                    plugins:{
+
+                        legend:{
+                            display:false
+                        }
+
+                    }
+
+                }
+
+            }
+        );
+
+
+    /*
+       DAILY FULL DAY TREND
+    */
+
+    const byDate = {};
+
+
+    filteredData.forEach(
+        function(x){
+
+            if(!x.date){
+                return;
+            }
+
+
+            if(!byDate[x.date]){
+                byDate[x.date] = 0;
+            }
+
+
+            if(
+                x.status ===
+                "FULL DAY PRESENT"
+            ){
+
+                byDate[x.date]++;
+
+            }
+
+        }
+    );
+
+
+    const dates =
+        Object.keys(
+            byDate
+        ).sort();
+
+
+    charts.daily =
+        new Chart(
+            dailyChart,
+            {
+
+                type:"line",
+
+                data:{
+
+                    labels:
+                        dates.map(
+                            x =>
+                                formatDate(x)
+                        ),
+
+                    datasets:[{
+
+                        label:
+                            "Full Day Present",
+
+                        data:
+                            dates.map(
+                                x =>
+                                    byDate[x]
+                            ),
+
+                        borderColor:
+                            "#3157d5",
+
+                        backgroundColor:
+                            "rgba(49,87,213,.12)",
+
+                        fill:true,
+
+                        tension:.3
+
+                    }]
+
+                },
+
+                options:{
+                    responsive:true,
+                    maintainAspectRatio:false
+                }
+
+            }
+        );
+
+}
+
+
+/* =========================================================
+   RECORDS
+========================================================= */
+
+function renderRecords(){
+
+    filterInfo.textContent =
+        rawData.length
+        ? "Showing "
+            + filteredData.length
+            + " of "
+            + rawData.length
+            + " attendance records."
+        : "No attendance file uploaded yet.";
+
+
+    if(!filteredData.length){
+
+        recordRows.innerHTML =
+            '<tr>' +
+            '<td colspan="11" class="empty">' +
+            'Upload a file to display attendance data.' +
+            '</td>' +
+            '</tr>';
+
+        return;
+
+    }
+
+
+    recordRows.innerHTML =
+        filteredData.map(
+            function(x){
+
+                const morningLate =
+                    x.morningLateMinutes || 0;
+
+
+                const afternoonLate =
+                    x.afternoonLateMinutes || 0;
+
+
+                const totalLate =
+                    x.lateMinutes || 0;
+
+
+                return (
+
+                    '<tr>'
+
+                    + '<td>'
+                    + formatDate(x.date)
+                    + '</td>'
+
+                    + '<td>'
+                    + escapeHtml(x.day)
+                    + '</td>'
+
+                    + '<td>'
+                    + escapeHtml(x.employeeId)
+                    + '</td>'
+
+                    + '<td>'
+                    + badge(x.status)
+                    + '</td>'
+
+                  //   + '<td>'
+                  //   + x.attendanceValue
+                  //   + '</td>'
+
+                    + '<td>'
+                    + (
+                        x.firstLogin ||
+                        "—"
+                    )
+                    + '</td>'
+
+                    + '<td>'
+                    + (
+                        x.afternoonCheckout ||
+                        "—"
+                    )
+                    + '</td>'
+
+                    + '<td>'
+                    + (
+                        x.afternoonCheckin ||
+                        "—"
+                    )
+                    + '</td>'
+
+                    + '<td>'
+                    + (
+                        x.lastLogout ||
+                        "—"
+                    )
+                    + '</td>'
+
+                  //   + '<td>'
+                  //   + (
+                  //       x.punchCount ||
+                  //       0
+                  //   )
+                  //   + '</td>'
+
+                    + '<td class="' +
+                    (
+                        morningLate > 0
+                        ? "late"
+                        : "on-time"
+                    ) +
+                    '">'
+                    + morningLate
+                    + '</td>'
+
+                    + '<td class="' +
+                    (
+                        afternoonLate > 0
+                        ? "late"
+                        : "on-time"
+                    ) +
+                    '">'
+                    + afternoonLate
+                    + '</td>'
+
+                    + '<td class="' +
+                    (
+                        totalLate > 0
+                        ? "late"
+                        : "on-time"
+                    ) +
+                    '">'
+                    + totalLate
+                    + '</td>'
+                     + '<td>'
++ (x.lateCount || 0)
++ '</td>'
+                    + '</tr>'
+
+//                     + '<td>'
+// + (x.morningLate || 0) + ' min'
+// + '</td>'
+
+// + '<td>'
+// + (x.afternoonLate || 0) + ' min'
+// + '</td>'
+
+// + '<td>'
+// + (x.lateMinutes || 0) + ' min'
+// + '</td>'
+
+// + '<td>'
+// + (x.lateCount || 0)
+// + '</td>'
+
+                 );
+
+            }
+        ).join("");
+
+}
+
+
+/* =========================================================
+   EMPLOYEE SUMMARY
+========================================================= */
+
+function employeeSummary(){
+
+    const map =
+        new Map();
+
+
+    filteredData.forEach(
+        function(x){
+
+            const key =
+                x.employeeId ||
+                x.employeeName;
+
+
+            if(!map.has(key)){
+
+                map.set(
+                    key,
+                    {
+
+                        id:
+                            x.employeeId,
+
+                        full:0,
+
+                        morning:0,
+
+                        afternoon:0,
+
+                        absent:0,
+
+                        morningLateMinutes:0,
+
+                        afternoonLateMinutes:0,
+
+                        lateMinutes:0
+
+                    }
+                );
+
+            }
+
+
+            const a =
+                map.get(key);
+
+
+            if(
+                x.status ===
+                "FULL DAY PRESENT"
+            ){
+
+                a.full++;
+
+            }
+
+
+            if(
+                x.status ===
+                "PRESENT IN THE MORNING"
+            ){
+
+                a.morning++;
+
+            }
+
+
+            if(
+                x.status ===
+                "PRESENT IN THE AFTERNOON"
+            ){
+
+                a.afternoon++;
+
+            }
+
+
+            if(
+                x.status === "ABSENT"
+            ){
+
+                a.absent++;
+
+            }
+
+
+            a.morningLateMinutes +=
+                x.morningLateMinutes || 0;
+
+
+            a.afternoonLateMinutes +=
+                x.afternoonLateMinutes || 0;
+
+
+            a.lateMinutes +=
+                x.lateMinutes || 0;
+
+        }
+    );
+
+
+    return [
+        ...map.values()
+    ]
+    .map(
+        function(x){
+
+            return {
+
+                ...x,
+
+                presentEquivalent:
+                    x.full
+                    +
+                    (
+                        x.morning +
+                        x.afternoon
+                    ) * 0.5
+
+            };
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   EMPLOYEE REPORT
+========================================================= */
+
+function renderEmployeeReport(){
+
+    const data =
+        employeeSummary();
+
+
+    employeeRows.innerHTML =
+        data.length
+        ? data.map(
+            function(x){
+
+                return (
+
+                    '<tr>'
+
+                    + '<td>'
+                    + escapeHtml(x.id)
+                    + '</td>'
+
+                    + '<td>'
+                    + x.full
+                    + '</td>'
+
+                    + '<td>'
+                    + x.morning
+                    + '</td>'
+
+                    + '<td>'
+                    + x.afternoon
+                    + '</td>'
+
+                    + '<td>'
+                    + x.absent
+                    + '</td>'
+
+                    + '<td>'
+                    + x.presentEquivalent
+                    + '</td>'
+
+                    + '<td>'
+                    + x.morningLateMinutes
+                    + '</td>'
+
+                    + '<td>'
+                    + x.afternoonLateMinutes
+                    + '</td>'
+
+                    + '<td>'
+                    + x.lateMinutes
+                    + '</td>'
+
+                    + '</tr>'
+
+                );
+
+            }
+        ).join("")
+
+        :
+
+        '<tr>' +
+        '<td colspan="9" class="empty">' +
+        'No data to display.' +
+        '</td>' +
+        '</tr>';
+
+}
+
+
+/* =========================================================
+   DATE REPORT
+========================================================= */
+
+function renderDates(){
+
+    const map =
+        new Map();
+
+
+    filteredData.forEach(
+        function(x){
+
+            if(!x.date){
+                return;
+            }
+
+
+            if(!map.has(x.date)){
+
+                map.set(
+                    x.date,
+                    {
+
+                        day:
+                            x.day,
+
+                        full:0,
+
+                        morning:0,
+
+                        afternoon:0,
+
+                        absent:0,
+
+                        off:0,
+
+                        lateEmp:
+                            new Set(),
+
+                        morningLate:0,
+
+                        afternoonLate:0,
+
+                        lateMinutes:0
+
+                    }
+                );
+
+            }
+
+
+            const a =
+                map.get(x.date);
+
+
+            if(
+                x.status ===
+                "FULL DAY PRESENT"
+            ){
+
+                a.full++;
+
+            }
+
+
+            if(
+                x.status ===
+                "PRESENT IN THE MORNING"
+            ){
+
+                a.morning++;
+
+            }
+
+
+            if(
+                x.status ===
+                "PRESENT IN THE AFTERNOON"
+            ){
+
+                a.afternoon++;
+
+            }
+
+
+            if(
+                x.status === "ABSENT"
+            ){
+
+                a.absent++;
+
+            }
+
+
+            if(
+                x.status ===
+                "SUNDAY / WEEKLY OFF"
+            ){
+
+                a.off++;
+
+            }
+
+
+            if(
+                x.lateMinutes > 0
+            ){
+
+                a.lateEmp.add(
+                    x.employeeId ||
+                    x.employeeName
+                );
+
+            }
+
+
+            a.morningLate +=
+                x.morningLateMinutes || 0;
+
+
+            a.afternoonLate +=
+                x.afternoonLateMinutes || 0;
+
+
+            a.lateMinutes +=
+                x.lateMinutes || 0;
+
+        }
+    );
+
+
+    const arr =
+        [
+            ...map.entries()
+        ]
+        .sort(
+            function(a,b){
+
+                return a[0].localeCompare(
+                    b[0]
+                );
+
+            }
+        );
+
+
+    dateRows.innerHTML =
+        arr.length
+        ? arr.map(
+            function(entry){
+
+                const d =
+                    entry[0];
+
+                const x =
+                    entry[1];
+
+
+                return (
+
+                    '<tr>'
+
+                    + '<td>'
+                    + formatDate(d)
+                    + '</td>'
+
+                    + '<td>'
+                    + escapeHtml(x.day)
+                    + '</td>'
+
+                    + '<td>'
+                    + x.full
+                    + '</td>'
+
+                    + '<td>'
+                    + x.morning
+                    + '</td>'
+
+                    + '<td>'
+                    + x.afternoon
+                    + '</td>'
+
+                    + '<td>'
+                    + x.absent
+                    + '</td>'
+
+                    + '<td>'
+                    + x.off
+                    + '</td>'
+
+                    + '<td>'
+                    + x.lateEmp.size
+                    + '</td>'
+
+                    + '<td>'
+                    + x.morningLate
+                    + '</td>'
+
+                    + '<td>'
+                    + x.afternoonLate
+                    + '</td>'
+
+                    + '<td>'
+                    + x.lateMinutes
+                    + '</td>'
+
+                    + '</tr>'
+
+                );
+
+            }
+        ).join("")
+
+        :
+
+        '<tr>' +
+        '<td colspan="12" class="empty">' +
+        'No data to display.' +
+        '</td>' +
+        '</tr>';
+
+}
+
+
+/* =========================================================
+   RENDER ALL
+========================================================= */
+
+function renderAll(){
+
+    renderDashboard();
+
+    renderRecords();
+
+    renderEmployeeReport();
+
+    renderDates();
+
+}
+
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
+function showPage(id){
+
+    document
+        .querySelectorAll(".page")
+        .forEach(
+            function(x){
+
+                x.classList.remove(
+                    "active"
+                );
+
+            }
+        );
+
+
+    const page =
+        document.getElementById(id);
+
+
+    if(page){
+
+        page.classList.add(
+            "active"
+        );
+
+    }
+
+
+    document
+        .querySelectorAll(".nav button")
+        .forEach(
+            function(x){
+
+                x.classList.toggle(
+                    "active",
+                    x.dataset.page === id
+                );
+
+            }
+        );
+
+
+    const titles = {
+
+        dashboard:
+            "Attendance Dashboard",
+
+        records:
+            "Uploaded & Filtered Data",
+
+        employees:
+            "Employee-wise Report",
+
+        dates:
+            "Date-wise Report",
+
+        raw:
+            "Raw Attendance Data",
+
+        upload:
+            "Upload Attendance File"
+
+    };
+
+
+    pageTitle.textContent =
+        titles[id] ||
+        "Attendance Dashboard";
+
+}
+
+
+document
+    .querySelectorAll(".nav button")
+    .forEach(
+        function(button){
+
+            button.onclick =
+                function(){
+
+                    showPage(
+                        button.dataset.page
+                    );
+
+                };
+
+        }
+    );
+
+
+/* =========================================================
+   EXPORT CSV
+========================================================= */
+
+function exportFilteredCSV(){
+
+    if(!filteredData.length){
+
+        alert(
+            "No filtered data available to export."
+        );
+
+        return;
+
+    }
+
+
+    const headers = [
+
+        "Date",
+
+        "Day",
+
+        "Employee ID",
+
+        "Employee Name",
+
+        "Attendance Status",
+
+        "Attendance Value",
+
+        "First Login",
+
+        "Afternoon Check-out",
+
+        "Afternoon Check-in",
+
+        "Last Logout",
+
+        "Punch Count",
+
+        "Morning Late Minutes",
+
+        "Afternoon Late Minutes",
+
+        "Total Late Minutes"
+
+    ];
+
+
+    const rows = [
+
+        headers,
+
+        ...filteredData.map(
+            function(x){
+
+                return [
+
+                    formatDate(
+                        x.date
+                    ),
+
+                    x.day,
+
+                    x.employeeId,
+
+                    x.employeeName,
+
+                    x.status,
+
+                    x.attendanceValue,
+
+                    x.firstLogin,
+
+                    x.afternoonCheckout,
+
+                    x.afternoonCheckin,
+
+                    x.lastLogout,
+
+                    x.punchCount,
+
+                    x.morningLateMinutes,
+
+                    x.afternoonLateMinutes,
+
+                    x.lateMinutes
+
+                ];
+
+            }
+        )
+
+    ];
+
+
+    const csv =
+        rows.map(
+            function(row){
+
+                return row.map(
+                    function(v){
+
+                        return '"'
+                            +
+                            String(
+                                v ?? ""
+                            )
+                            .replaceAll(
+                                '"',
+                                '""'
+                            )
+                            +
+                            '"';
+
+                    }
+                ).join(",");
+
+            }
+        ).join("\n");
+
+
+    const blob =
+        new Blob(
+            [csv],
+            {
+                type:"text/csv"
+            }
+        );
+
+
+    const url =
+        URL.createObjectURL(blob);
+
+
+    const a =
+        document.createElement("a");
+
+
+    a.href =
+        url;
+
+
+    a.download =
+        "attendance_report.csv";
+
+
+    document.body.appendChild(a);
+
+    a.click();
+
+    document.body.removeChild(a);
+
+
+    URL.revokeObjectURL(url);
+
+}
+
+
+/* =========================================================
+   CLEAR DATA
+========================================================= */
+
+function clearData(){
+
+    if(
+        !confirm(
+            "Clear all uploaded attendance data?"
+        )
+    ){
+
+        return;
+
+    }
+
+
+    rawData = [];
+
+    filteredData = [];
+
+    rawLines = [];
+
+
+    localStorage.removeItem(
+        "attendanceRawTXTDataV4"
+    );
+
+
+    fileInfo.textContent = "";
+
+
+    sideStatus.textContent =
+        "NO FILE LOADED";
+
+
+    rawInfo.textContent =
+        "Upload a TXT file to see raw device records.";
+
+
+    rawPreview.textContent =
+        "No raw data loaded.";
+
+
+    attendanceFile.value = "";
+
+
+    populateEmployees();
+
+    renderAll();
+
+}
+
+
+/* =========================================================
+   RESTORE PREVIOUS DATA
+========================================================= */
+
+try{
+
+    const saved =
+        JSON.parse(
+            localStorage.getItem(
+                "attendanceRawTXTDataV4"
+            )
+            || "[]"
+        );
+
+
+    if(
+        Array.isArray(saved) &&
+        saved.length
+    ){
+
+        rawData =
+            saved;
+
+
+        /*
+           Ensure older saved records
+           have the new fields.
+        */
+
+        rawData =
+            rawData.map(
+                function(x){
+
+                    return {
+
+                        ...x,
+
+                        afternoonCheckout:
+                            x.afternoonCheckout ||
+                            "",
+
+                        afternoonCheckin:
+                            x.afternoonCheckin ||
+                            "",
+
+                        morningLateMinutes:
+                            Number(
+                                x.morningLateMinutes
+                            ) || 0,
+
+                        afternoonLateMinutes:
+                            Number(
+                                x.afternoonLateMinutes
+                            ) || 0,
+
+                        lateMinutes:
+                            Number(
+                                x.lateMinutes
+                            ) ||
+                            (
+                                (
+                                    Number(
+                                        x.morningLateMinutes
+                                    ) || 0
+                                )
+                                +
+                                (
+                                    Number(
+                                        x.afternoonLateMinutes
+                                    ) || 0
+                                )
+                            )
+
+                    };
+
+                }
+            );
+
+
+        filteredData =
+            [...rawData];
+
+
+        populateEmployees();
+
+
+        sideStatus.textContent =
+            "PREVIOUS DATA LOADED";
+
+    }
+
+}
+
+catch(e){
+
+    console.error(e);
+
+}
+
+
+renderAll();
+
+</script>
+
+</body>
+</html>
+

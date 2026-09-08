@@ -1,0 +1,3913 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance OS - Raw TXT Dashboard</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <style>
+        :root {
+            --bg: #f4f7fb;
+            --panel: #fff;
+            --ink: #182230;
+            --muted: #6b7787;
+            --primary: #3157d5;
+            --green: #1fa774;
+            --amber: #e99a22;
+            --red: #dc4c64;
+            --purple: #7654d6;
+            --line: #e8edf4;
+            --shadow: 0 12px 35px rgba(24, 34, 48, .08)
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            font-family: Inter, Segoe UI, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--ink)
+        }
+
+        .app {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            min-height: 100vh
+        }
+
+        .side {
+            background: #111a2b;
+            color: #d9e1ef;
+            padding: 24px 16px;
+            position: sticky;
+            top: 0;
+            height: 100vh
+        }
+
+        .brand {
+            font-size: 20px;
+            font-weight: 800;
+            color: #fff;
+            margin: 5px 10px 32px
+        }
+
+        .brand span {
+            color: #8fa2ff
+        }
+
+        .nav button {
+            width: 100%;
+            border: 0;
+            background: transparent;
+            color: #b7c3d8;
+            padding: 14px 12px;
+            text-align: left;
+            border-radius: 10px;
+            margin: 4px 0;
+            font-size: 14px;
+            cursor: pointer
+        }
+
+        .nav button:hover,
+        .nav button.active {
+            background: #233252;
+            color: #fff
+        }
+
+        .sidefoot {
+            position: absolute;
+            bottom: 22px;
+            left: 26px;
+            font-size: 12px;
+            color: #71809a
+        }
+
+        main {
+            padding: 28px;
+            overflow: hidden
+        }
+
+        .top {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            align-items: flex-start;
+            margin-bottom: 24px
+        }
+
+        .top h1 {
+            margin: 0;
+            font-size: 28px
+        }
+
+        .top p {
+            margin: 7px 0 0;
+            color: var(--muted)
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap
+        }
+
+        .btn {
+            border: 0;
+            border-radius: 10px;
+            padding: 11px 14px;
+            font-weight: 700;
+            cursor: pointer;
+            background: #eaf0ff;
+            color: #294ab7
+        }
+
+        .btn.primary {
+            background: var(--primary);
+            color: #fff
+        }
+
+        .btn.danger {
+            background: #fff0f2;
+            color: #b93249
+        }
+
+        .btn:hover {
+            transform: translateY(-1px)
+        }
+
+        .page {
+            display: none
+        }
+
+        .page.active {
+            display: block
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(140px, 1fr));
+            gap: 14px;
+            margin-bottom: 18px
+        }
+
+        .card,
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: var(--shadow)
+        }
+
+        .label {
+            font-size: 11px;
+            color: var(--muted);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        .value {
+            font-size: 27px;
+            font-weight: 800;
+            margin-top: 8px
+        }
+
+        .hint {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 6px
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1.2fr .8fr;
+            gap: 18px
+        }
+
+        .panel h3 {
+            margin: 0 0 14px;
+            font-size: 16px
+        }
+
+        .chart {
+            height: 300px;
+            position: relative
+        }
+
+        .uploadbox {
+            border: 2px dashed #b9c8ea;
+            border-radius: 16px;
+            padding: 28px;
+            text-align: center;
+            background: #fbfcff
+        }
+
+        .uploadbox.drag {
+            border-color: var(--primary);
+            background: #f2f5ff
+        }
+
+        .uploadbox h3 {
+            margin: 0 0 8px
+        }
+
+        .uploadbox p {
+            margin: 0 0 15px;
+            color: var(--muted);
+            font-size: 13px
+        }
+
+        .fileinfo {
+            margin-top: 12px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #27633f
+        }
+
+        .filters {
+            display: grid;
+            grid-template-columns: 1.2fr repeat(3, 1fr) auto;
+            gap: 10px;
+            margin-bottom: 15px
+        }
+
+        .input,
+        select {
+            border: 1px solid #dce4ef;
+            background: #fff;
+            padding: 10px 12px;
+            border-radius: 9px;
+            outline: none;
+            color: var(--ink);
+            width: 100%
+        }
+
+        .tablewrap {
+            overflow: auto;
+            max-height: 580px
+        }
+
+        .reporttable {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 13px
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: #f7f9fc;
+            color: #647084;
+            text-align: left;
+            padding: 11px;
+            border-bottom: 1px solid var(--line);
+            z-index: 1
+        }
+
+        td {
+            padding: 11px;
+            border-bottom: 1px solid #eef2f6;
+            white-space: nowrap
+        }
+
+        .badge {
+            padding: 5px 9px;
+            border-radius: 99px;
+            font-size: 10px;
+            font-weight: 800;
+            display: inline-block
+        }
+
+        .b-green {
+            background: #e8f8f1;
+            color: #16865d
+        }
+
+        .b-red {
+            background: #fff0f2;
+            color: #c63850
+        }
+
+        .b-amber {
+            background: #fff6e8;
+            color: #b16e09
+        }
+
+        .b-purple {
+            background: #f0edff;
+            color: #6242c5
+        }
+
+        .b-gray {
+            background: #eef2f7;
+            color: #657184
+        }
+
+        .empty {
+            padding: 35px;
+            text-align: center;
+            color: var(--muted)
+        }
+
+        .note {
+            font-size: 12px;
+            color: var(--muted);
+            line-height: 1.5
+        }
+
+        .employee-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px
+        }
+
+        .raw-preview {
+            background: #111a2b;
+            color: #d9e1ef;
+            padding: 14px;
+            border-radius: 10px;
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            overflow: auto;
+            max-height: 180px;
+            white-space: pre
+        }
+
+        @media(max-width:1200px) {
+            .cards {
+                grid-template-columns: repeat(3, 1fr)
+            }
+        }
+
+        @media(max-width:900px) {
+            .app {
+                grid-template-columns: 1fr
+            }
+
+            .side {
+                position: relative;
+                height: auto
+            }
+
+            .sidefoot {
+                display: none
+            }
+
+            .nav {
+                display: flex;
+                overflow: auto
+            }
+
+            .nav button {
+                min-width: max-content
+            }
+
+            .grid {
+                grid-template-columns: 1fr
+            }
+
+            .filters {
+                grid-template-columns: 1fr 1fr
+            }
+
+            .employee-grid {
+                grid-template-columns: 1fr 1fr
+            }
+        }
+
+        @media(max-width:600px) {
+            main {
+                padding: 16px
+            }
+
+            .top {
+                flex-direction: column
+            }
+
+            .cards,
+            .employee-grid {
+                grid-template-columns: 1fr
+            }
+
+            .filters {
+                grid-template-columns: 1fr
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="app">
+
+        <aside class="side">
+
+            <div class="brand">
+                ATTENDANCE <span>OS</span>
+            </div>
+
+            <div class="nav">
+
+                <button class="active" data-page="dashboard">
+                    ▦ Dashboard
+                </button>
+
+                <button data-page="records">
+                    ▤ Attendance Records
+                </button>
+
+                <button data-page="employees">
+                    ♙ Employee Report
+                </button>
+
+                <button data-page="dates">
+                    ◫ Date-wise Report
+                </button>
+
+                <button data-page="raw">
+                    ≡ Raw Data
+                </button>
+
+                <button data-page="upload">
+                    ⇧ Upload File
+                </button>
+
+            </div>
+
+            <div class="sidefoot" id="sideStatus">
+                NO FILE LOADED
+            </div>
+
+        </aside>
+
+        <main>
+
+            <div class="top">
+
+                <div>
+                    <h1 id="pageTitle">
+                        Attendance Dashboard
+                    </h1>
+
+                    <p id="subtitle">
+                        Upload your raw TXT attendance file and the dashboard will automatically process it.
+                    </p>
+                </div>
+
+                <div class="actions">
+
+                    <button class="btn" onclick="showPage('upload')">
+                        Upload File
+                    </button>
+
+                    <button class="btn primary" onclick="exportFilteredCSV()">
+                        Export Processed Data
+                    </button>
+
+                    <button class="btn danger" onclick="clearData()">
+                        Clear Data
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <!-- DASHBOARD -->
+
+            <section id="dashboard" class="page active">
+
+                <div class="cards">
+
+                    <div class="card">
+                        <div class="label">Employees</div>
+                        <div class="value" id="kEmp">0</div>
+                        <div class="hint">Unique employees</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="label">Full Day</div>
+                        <div class="value" id="kFull">0</div>
+                        <div class="hint">Attendance records</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="label">Morning Half</div>
+                        <div class="value" id="kMorning">0</div>
+                        <div class="hint">Left during morning</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="label">Afternoon Half</div>
+                        <div class="value" id="kAfternoon">0</div>
+                        <div class="hint">Joined after noon</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="label">Absent</div>
+                        <div class="value" id="kAbsent">0</div>
+                        <div class="hint">No punch record</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="label">Late Minutes</div>
+                        <div class="value" id="kLate">0</div>
+                        <div class="hint">Calculated from login</div>
+                    </div>
+
+                </div>
+
+
+                <div class="grid">
+
+                    <div class="panel">
+
+                        <h3>
+                            Attendance Distribution
+                        </h3>
+
+                        <div class="chart">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+
+                    </div>
+
+
+                    <div class="panel">
+
+                        <h3>
+                            Late Minutes by Employee
+                        </h3>
+
+                        <div class="chart">
+                            <canvas id="lateChart"></canvas>
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="panel" style="margin-top:18px">
+
+                    <h3>
+                        Daily Attendance Trend
+                    </h3>
+
+                    <div class="chart">
+                        <canvas id="dailyChart"></canvas>
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- RECORDS -->
+
+            <section id="records" class="page">
+
+                <div class="filters">
+
+                    <input class="input" id="searchInput" placeholder="Search employee ID..." oninput="applyFilters()">
+
+                    <input class="input" id="dateFilter" type="date" onchange="applyFilters()">
+
+                    <select id="statusFilter" onchange="applyFilters()">
+
+                        <option value="">
+                            All Statuses
+                        </option>
+
+                        <option>
+                            FULL DAY PRESENT
+                        </option>
+
+                        <option>
+                            HALF DAY - MORNING
+                        </option>
+
+                        <option>
+                            HALF DAY - AFTERNOON
+                        </option>
+
+                        <option>
+                            ABSENT
+                        </option>
+
+                        <option>
+                            SUNDAY / WEEKLY OFF
+                        </option>
+
+                    </select>
+
+                    <select id="employeeFilter" onchange="applyFilters()">
+
+                        <option value="">
+                            All Employees
+                        </option>
+
+                    </select>
+
+                    <button class="btn" onclick="resetFilters()">
+                        Reset
+                    </button>
+
+                </div>
+
+
+                <div class="panel">
+
+                    <div class="note" id="filterInfo">
+                        No attendance file uploaded yet.
+                    </div>
+
+                    <div class="tablewrap" style="margin-top:12px">
+
+                        <table class="reporttable">
+
+                            <thead>
+
+                                <tr>
+
+                                    <th>Date</th>
+                                    <th>Day</th>
+                                    <th>Employee ID</th>
+                                    <th>Employee Name</th>
+                                    <th>Status</th>
+                                    <th>Attendance Value</th>
+                                    <th>First Login</th>
+                                    <th>Afternoon Check-out</th>
+                                    <th>Afternoon Check-in</th>
+                                    <th>Last Logout</th>
+                                    <th>Punch Count</th>
+                                    <th>Late Minutes</th>
+
+                                </tr>
+
+                            </thead>
+
+                            <tbody id="recordRows"></tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- EMPLOYEE REPORT -->
+
+            <section id="employees" class="page">
+
+                <div class="filters">
+
+                    <input class="input" id="employeeReportSearch" placeholder="Search employee..."
+                        oninput="renderEmployeeReport()">
+
+                    <select id="employeeSort" onchange="renderEmployeeReport()">
+
+                        <option value="name">
+                            Sort by Name
+                        </option>
+
+                        <option value="present">
+                            Sort by Attendance
+                        </option>
+
+                        <option value="late">
+                            Sort by Late Minutes
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div class="panel tablewrap">
+
+                    <table class="reporttable">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>Employee ID</th>
+                                <th>Employee</th>
+                                <th>Full Day</th>
+                                <th>Morning Half</th>
+                                <th>Afternoon Half</th>
+                                <th>Absent</th>
+                                <th>Present Equivalent</th>
+                                <th>Leave Count</th>
+                                <th>Leave Dates</th>
+                                <th>Late Minutes</th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody id="employeeRows"></tbody>
+
+                    </table>
+
+                </div>
+
+            </section>
+
+
+            <!-- DATE REPORT -->
+
+            <section id="dates" class="page">
+
+                <div class="panel tablewrap">
+
+                    <table class="reporttable">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>Date</th>
+                                <th>Day</th>
+                                <th>Full Day</th>
+                                <th>Morning Half</th>
+                                <th>Afternoon Half</th>
+                                <th>Absent</th>
+                                <th>Weekly Off</th>
+                                <th>Late Employees</th>
+                                <th>Late Minutes</th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody id="dateRows"></tbody>
+
+                    </table>
+
+                </div>
+
+            </section>
+
+
+            <!-- RAW DATA -->
+
+            <section id="raw" class="page">
+
+                <div class="panel">
+
+                    <h3>
+                        Raw TXT Data Preview
+                    </h3>
+
+                    <div class="note" id="rawInfo">
+                        Upload a TXT file to see the raw records.
+                    </div>
+
+                    <div class="raw-preview" id="rawPreview" style="margin-top:15px">
+                        No raw data loaded.
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- UPLOAD -->
+
+            <section id="upload" class="page">
+
+                <div class="panel">
+
+                    <div class="uploadbox" id="dropZone">
+
+                        <h3>
+                            Upload Attendance File
+                        </h3>
+
+                        <p>
+                            Upload your raw TXT attendance file directly.
+                            CSV and Excel files are also supported.
+                        </p>
+
+                        <input id="attendanceFile" type="file"
+                            accept=".txt,.csv,.xlsx,.xls,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                            hidden>
+
+                        <button class="btn primary" onclick="attendanceFile.click()">
+                            Choose File
+                        </button>
+
+                        <div class="fileinfo" id="fileInfo">
+                        </div>
+
+                    </div>
+
+
+                    <div style="margin-top:18px" class="note">
+
+                        <b>Raw TXT format detected:</b>
+
+                        <br><br>
+
+                        The application reads records in this style:
+
+                        <br><br>
+
+                        <code>
+378    2026-08-01 09:27:45    1    0    3    0
+</code>
+
+                        <br><br>
+
+                        The parser extracts:
+
+                        <br>
+
+                        • Employee ID<br>
+                        • Date<br>
+                        • Time<br>
+                        • All punches for that employee/date<br>
+                        • First Login (Morning Check-in)<br>
+                        • Afternoon Check-out (Lunch Out - 2:00 PM)<br>
+                        • Afternoon Check-in (Lunch In - 2:30 PM cutoff)<br>
+                        • Last Logout (Evening Departure)<br>
+                        • Punch Count<br>
+                        • Attendance Status &amp; Late Minutes<br>
+
+                        <br>
+
+                        The remaining device fields are preserved internally but are not used to calculate attendance.
+
+                    </div>
+
+                </div>
+
+            </section>
+
+        </main>
+
+    </div>
+
+
+    <script>
+
+        /* =========================================================
+           GLOBAL DATA
+        ========================================================= */
+
+        let rawData = [];
+        let filteredData = [];
+        let rawLines = [];
+        let charts = {};
+
+
+        /* =========================================================
+           CONFIGURATION
+        ========================================================= */
+
+        const WORK_START = 9 * 60 + 30; // 09:30 AM Work Start
+
+        // Lunch starts at 14:00 (2:00 PM) in your attendance setup.
+        const LUNCH_START = 14 * 60;
+
+        // Lunch ends at 14:30 (2:30 PM) - Check-in after 14:30 is considered late afternoon attendance.
+        const LUNCH_END = 14 * 60 + 30;
+
+        // Used for deciding morning/afternoon half-day.
+        const HALF_DAY_CUTOFF = 13 * 60 + 30;
+
+
+        /* =========================================================
+           BASIC HELPERS
+        ========================================================= */
+
+        function escapeHtml(v) {
+
+            return String(v ?? "").replace(
+                /[&<>"']/g,
+                function (m) {
+
+                    return {
+                        "&": "&amp;",
+                        "<": "&lt;",
+                        ">": "&gt;",
+                        '"': "&quot;",
+                        "'": "&#039;"
+                    }[m];
+
+                }
+            );
+
+        }
+
+
+        function norm(s) {
+
+            return String(s || "")
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, "");
+
+        }
+
+
+        function minutesToTime(m) {
+
+            if (m === null || m === undefined) {
+                return "";
+            }
+
+            return String(
+                Math.floor(m / 60)
+            ).padStart(2, "0")
+                + ":" +
+                String(
+                    m % 60
+                ).padStart(2, "0");
+
+        }
+
+
+        function formatDate(date) {
+
+            if (!date) {
+                return "";
+            }
+
+            const p = date.split("-");
+
+            if (p.length !== 3) {
+                return date;
+            }
+
+            const months = [
+                "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
+            ];
+
+            const y = p[0];
+            const m = Number(p[1]);
+            const d = p[2];
+
+            return String(d).padStart(2, "0")
+                + "-" +
+                months[m - 1]
+                + "-" +
+                y;
+
+        }
+
+
+        function getDayName(date) {
+
+            if (!date) {
+                return "";
+            }
+
+            const d = new Date(date + "T12:00:00");
+
+            if (isNaN(d)) {
+                return "";
+            }
+
+            return d.toLocaleDateString(
+                "en-US",
+                { weekday: "long" }
+            );
+
+        }
+
+
+        function getDateFromTimestamp(timestamp) {
+
+            const match = String(timestamp).match(
+                /(\d{4})-(\d{2})-(\d{2})/
+            );
+
+            if (!match) {
+                return "";
+            }
+
+            return `${match[1]}-${match[2]}-${match[3]}`;
+
+        }
+
+
+        function getTimeFromTimestamp(timestamp) {
+
+            const match = String(timestamp).match(
+                /(\d{1,2}):(\d{2})(?::(\d{2}))?/
+            );
+
+            if (!match) {
+                return null;
+            }
+
+            return (
+                Number(match[1]) * 60 +
+                Number(match[2])
+            );
+
+        }
+
+
+        /* =========================================================
+           RAW TXT PARSER
+        ========================================================= */
+
+        /*
+        
+        Expected raw line:
+        
+        378    2026-08-01 09:27:45    1    0    3    0
+        
+        The parser does NOT depend on tabs specifically.
+        
+        It also accepts multiple spaces.
+        
+        */
+
+        function parseRawTxt(text) {
+
+            const lines = text
+                .replace(/\r\n/g, "\n")
+                .replace(/\r/g, "\n")
+                .split("\n");
+
+            rawLines = lines;
+
+            const punches = [];
+
+            lines.forEach((line, index) => {
+
+                const clean = line.trim();
+
+                if (!clean) {
+                    return;
+                }
+
+                /*
+                 Find:
+              
+                 employee ID
+                 YYYY-MM-DD
+                 HH:MM:SS
+                */
+
+                const match = clean.match(
+                    /^\s*(\d+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*(.*)$/
+                );
+
+                if (!match) {
+                    return;
+                }
+
+                const employeeId = match[1];
+                const date = match[2];
+                const time = match[3];
+                const rest = match[4] || "";
+
+                const minutes = getTimeFromTimestamp(
+                    `${date} ${time}`
+                );
+
+                if (minutes === null) {
+                    return;
+                }
+
+                punches.push({
+
+                    employeeId: employeeId,
+
+                    date: date,
+
+                    time: time,
+
+                    minutes: minutes,
+
+                    raw: clean,
+
+                    extra: rest,
+
+                    sourceLine: index + 1
+
+                });
+
+            });
+
+
+            return punches;
+
+        }
+
+
+        /* =========================================================
+           GROUP RAW PUNCHES
+        ========================================================= */
+
+        function buildAttendanceFromRaw(punches) {
+
+            const groups = new Map();
+
+            punches.forEach(p => {
+
+                const key =
+                    `${p.employeeId}|${p.date}`;
+
+                if (!groups.has(key)) {
+
+                    groups.set(
+                        key,
+                        {
+                            employeeId: p.employeeId,
+                            employeeName: p.employeeId,
+                            date: p.date,
+                            punches: []
+                        }
+                    );
+
+                }
+
+                groups.get(key).punches.push(p);
+
+            });
+
+
+            const result = [];
+
+            groups.forEach(group => {
+
+                group.punches.sort(
+                    (a, b) => a.minutes - b.minutes
+                );
+
+                const punchCount = group.punches.length;
+                let firstLoginMin = null;
+                let afternoonLogoutMin = null;
+                let afternoonLoginMin = null;
+                let lastLogoutMin = null;
+
+                if (punchCount === 1) {
+
+                    const p0 = group.punches[0].minutes;
+                    if (p0 < LUNCH_START) {
+                        firstLoginMin = p0;
+                    } else if (p0 <= LUNCH_END + 15) {
+                        // Checkin within or around 2:30 PM
+                        afternoonLoginMin = p0;
+                        lastLogoutMin = p0;
+                    } else {
+                        lastLogoutMin = p0;
+                    }
+
+                } else if (punchCount === 2) {
+
+                    const p0 = group.punches[0].minutes;
+                    const p1 = group.punches[1].minutes;
+
+                    if (p0 < 12 * 60) {
+                        firstLoginMin = p0;
+                        if (p1 >= LUNCH_START && p1 <= LUNCH_END + 15) {
+                            // Logout at/after 2:00 PM
+                            afternoonLogoutMin = p1;
+                            lastLogoutMin = p1;
+                        } else {
+                            lastLogoutMin = p1;
+                        }
+                    } else if (p0 >= LUNCH_START) {
+                        // Checkin in afternoon (within or after 2:30 PM)
+                        afternoonLoginMin = p0;
+                        lastLogoutMin = p1;
+                    } else {
+                        firstLoginMin = p0;
+                        lastLogoutMin = p1;
+                    }
+
+                } else if (punchCount === 3) {
+
+                    const p0 = group.punches[0].minutes;
+                    const p1 = group.punches[1].minutes;
+                    const p2 = group.punches[2].minutes;
+
+                    firstLoginMin = p0;
+                    lastLogoutMin = p2;
+
+                    // If middle punch is logout at or after 2:00 PM (14:00 - 14:15)
+                    if (p1 >= LUNCH_START && p1 <= 14 * 60 + 15) {
+                        afternoonLogoutMin = p1;
+                    } else if (p1 > 14 * 60 + 15 && p1 <= 16 * 60) {
+                        // Middle punch is checkin within or after 2:30 PM
+                        afternoonLoginMin = p1;
+                    } else if (p1 < LUNCH_START) {
+                        afternoonLogoutMin = p1;
+                    } else {
+                        afternoonLoginMin = p1;
+                    }
+
+                } else if (punchCount >= 4) {
+
+                    firstLoginMin = group.punches[0].minutes;
+                    lastLogoutMin = group.punches[punchCount - 1].minutes;
+
+                    const midPunches = group.punches.slice(1, -1);
+
+                    // 1. Afternoon Check-out: Logout at or after 2:00 PM (14:00)
+                    const logoutAfter2Candidates = midPunches.filter(p => p.minutes >= LUNCH_START - 20 && p.minutes <= LUNCH_START + 25);
+                    if (logoutAfter2Candidates.length > 0) {
+                        afternoonLogoutMin = logoutAfter2Candidates[0].minutes;
+                    } else {
+                        const earlyMid = midPunches.filter(p => p.minutes < LUNCH_START + 25);
+                        if (earlyMid.length > 0) {
+                            afternoonLogoutMin = earlyMid[earlyMid.length - 1].minutes;
+                        }
+                    }
+
+                    // 2. Afternoon Check-in: Return / Check-in within 2:30 PM (or after 2:30 PM)
+                    const checkinCandidates = midPunches.filter(p =>
+                        p.minutes >= LUNCH_START &&
+                        (afternoonLogoutMin === null || p.minutes > afternoonLogoutMin)
+                    );
+                    if (checkinCandidates.length > 0) {
+                        afternoonLoginMin = checkinCandidates[0].minutes;
+                    }
+
+                    if (afternoonLogoutMin === null && afternoonLoginMin === null && midPunches.length >= 2) {
+                        afternoonLogoutMin = midPunches[0].minutes;
+                        afternoonLoginMin = midPunches[1].minutes;
+                    }
+
+                }
+
+
+                let status = "FULL DAY PRESENT";
+
+                if (punchCount === 0 || (firstLoginMin === null && afternoonLoginMin === null && lastLogoutMin === null)) {
+
+                    status = "ABSENT";
+
+                } else if (
+                    new Date(
+                        group.date + "T12:00:00"
+                    ).getDay() === 0
+                ) {
+
+                    status = "SUNDAY / WEEKLY OFF";
+
+                } else if (
+                    firstLoginMin !== null &&
+                    firstLoginMin < 12 * 60 &&
+                    lastLogoutMin !== null &&
+                    lastLogoutMin < HALF_DAY_CUTOFF &&
+                    afternoonLoginMin === null
+                ) {
+
+                    status = "HALF DAY - MORNING";
+
+                } else if (
+                    (firstLoginMin === null || firstLoginMin >= HALF_DAY_CUTOFF) &&
+                    afternoonLoginMin !== null
+                ) {
+
+                    status = "HALF DAY - AFTERNOON";
+
+                }
+
+
+                /*
+                 Calculate morning late minutes (Work starts at 09:30).
+                */
+                let morningLateMinutes = 0;
+
+                if (
+                    firstLoginMin !== null &&
+                    firstLoginMin > WORK_START &&
+                    status !== "SUNDAY / WEEKLY OFF" &&
+                    status !== "ABSENT"
+                ) {
+
+                    morningLateMinutes =
+                        firstLoginMin - WORK_START;
+
+                }
+
+
+                /*
+                 Calculate afternoon late minutes (Lunch ends at 14:30 / 2:30 PM).
+                 Check-in after 2:30 PM is counted as late attendance.
+                */
+                let afternoonLateMinutes = 0;
+
+                if (
+                    afternoonLoginMin !== null &&
+                    afternoonLoginMin > LUNCH_END &&
+                    status !== "SUNDAY / WEEKLY OFF" &&
+                    status !== "ABSENT"
+                ) {
+
+                    afternoonLateMinutes =
+                        afternoonLoginMin - LUNCH_END;
+
+                }
+
+
+                const totalLateMinutes =
+                    morningLateMinutes + afternoonLateMinutes;
+
+
+                let attendanceValue = 1;
+
+                if (
+                    status === "HALF DAY - MORNING" ||
+                    status === "HALF DAY - AFTERNOON"
+                ) {
+
+                    attendanceValue = 0.5;
+
+                }
+
+                if (status === "ABSENT" || status === "SUNDAY / WEEKLY OFF") {
+
+                    attendanceValue = 0;
+
+                }
+
+
+                result.push({
+
+                    _index: result.length + 1,
+
+                    date: group.date,
+
+                    day: getDayName(group.date),
+
+                    employeeId: group.employeeId,
+
+                    employeeName: group.employeeName,
+
+                    status: status,
+
+                    attendanceValue: attendanceValue,
+
+                    lateMinutes: totalLateMinutes,
+
+                    morningLateMinutes: morningLateMinutes,
+
+                    afternoonLateMinutes: afternoonLateMinutes,
+
+                    lateFine: 0,
+
+                    firstLogin: firstLoginMin !== null
+                        ? minutesToTime(firstLoginMin)
+                        : "",
+
+                    afternoonLogout: afternoonLogoutMin !== null
+                        ? minutesToTime(afternoonLogoutMin)
+                        : "",
+
+                    afternoonLogin: afternoonLoginMin !== null
+                        ? minutesToTime(afternoonLoginMin)
+                        : "",
+
+                    lastLogout: lastLogoutMin !== null
+                        ? minutesToTime(lastLogoutMin)
+                        : "",
+
+                    punchCount: punchCount,
+
+                    punchTimes: group.punches
+                        .map(x => x.time)
+                        .join(", "),
+
+                    rawPunches: group.punches
+                        .map(x => x.raw)
+                        .join("\n")
+
+                });
+
+            });
+
+
+            result.sort((a, b) => {
+
+                if (a.date !== b.date) {
+                    return a.date.localeCompare(b.date);
+                }
+
+                return String(a.employeeId)
+                    .localeCompare(
+                        String(b.employeeId),
+                        undefined,
+                        { numeric: true }
+                    );
+
+            });
+
+
+            return result;
+
+        }
+
+
+        /* =========================================================
+           LOAD TXT
+        ========================================================= */
+
+        function loadTXT(file) {
+
+            const reader = new FileReader();
+
+            reader.onload = function (e) {
+
+                try {
+
+                    const text = e.target.result;
+
+                    const punches = parseRawTxt(text);
+
+                    if (!punches.length) {
+
+                        alert(
+                            "No valid attendance records were found.\n\n" +
+                            "Expected format:\n" +
+                            "378    2026-08-01 09:27:45    1    0    3    0"
+                        );
+
+                        return;
+
+                    }
+
+
+                    rawData =
+                        buildAttendanceFromRaw(punches);
+
+                    filteredData = [...rawData];
+
+
+                    localStorage.setItem(
+                        "attendanceRawTXTDataV3",
+                        JSON.stringify(rawData)
+                    );
+
+
+                    localStorage.setItem(
+                        "attendanceRawTXTPreviewV3",
+                        text
+                    );
+
+
+                    fileInfo.textContent =
+                        `Loaded TXT: ${file.name} • ` +
+                        `${punches.length} raw punches • ` +
+                        `${rawData.length} employee/day records`;
+
+
+                    sideStatus.textContent =
+                        `${file.name.slice(0, 22).toUpperCase()} LOADED`;
+
+
+                    populateEmployees();
+
+                    resetFilters();
+
+                    renderRawPreview();
+
+                    renderAll();
+
+                    showPage("dashboard");
+
+
+                } catch (error) {
+
+                    console.error(error);
+
+                    alert(
+                        "There was a problem reading the TXT file."
+                    );
+
+                }
+
+            };
+
+            reader.readAsText(file);
+
+        }
+
+
+        /* =========================================================
+           CSV SUPPORT
+        ========================================================= */
+
+        function csvParse(text) {
+
+            const rows = [];
+            let row = [];
+            let cell = "";
+            let quoted = false;
+
+            for (
+                let i = 0;
+                i < text.length;
+                i++
+            ) {
+
+                const c = text[i];
+                const n = text[i + 1];
+
+                if (c === '"') {
+
+                    if (quoted && n === '"') {
+
+                        cell += '"';
+                        i++;
+
+                    } else {
+
+                        quoted = !quoted;
+
+                    }
+
+                }
+
+                else if (c === "," && !quoted) {
+
+                    row.push(cell);
+                    cell = "";
+
+                }
+
+                else if (
+                    (c === "\n" || c === "\r") &&
+                    !quoted
+                ) {
+
+                    if (c === "\r" && n === "\n") {
+                        i++;
+                    }
+
+                    row.push(cell);
+
+                    if (
+                        row.some(
+                            x => String(x).trim() !== ""
+                        )
+                    ) {
+
+                        rows.push(row);
+
+                    }
+
+                    row = [];
+                    cell = "";
+
+                }
+
+                else {
+
+                    cell += c;
+
+                }
+
+            }
+
+            if (
+                cell.length ||
+                row.length
+            ) {
+
+                row.push(cell);
+                rows.push(row);
+
+            }
+
+            return rows;
+
+        }
+
+
+        function canonicalStatus(v) {
+
+            const s =
+                String(v || "")
+                    .trim()
+                    .toUpperCase();
+
+            if (s.includes("MORNING"))
+                return "HALF DAY - MORNING";
+
+            if (
+                s.includes("AFTERNOON") ||
+                s.includes("NOON")
+            )
+                return "HALF DAY - AFTERNOON";
+
+            if (
+                s.includes("FULL") ||
+                s === "P" ||
+                s === "PRESENT"
+            )
+                return "FULL DAY PRESENT";
+
+            if (
+                s.includes("ABSENT") ||
+                s === "A"
+            )
+                return "ABSENT";
+
+            if (
+                s.includes("SUNDAY") ||
+                s.includes("WEEKLY OFF") ||
+                s === "OFF"
+            )
+                return "SUNDAY / WEEKLY OFF";
+
+            return s || "UNKNOWN";
+
+        }
+
+
+        function parseDateValue(v) {
+
+            v = String(v || "").trim();
+
+            if (!v) {
+                return "";
+            }
+
+            if (
+                /^\d{4}-\d{2}-\d{2}$/.test(v)
+            ) {
+                return v;
+            }
+
+            let m =
+                v.match(
+                    /^(\d{1,2})[-\/ ]([A-Za-z]{3,9}|\d{1,2})[-\/ ](\d{2,4})$/
+                );
+
+            if (m) {
+
+                let d = m[1];
+                let mon = m[2];
+                let y = m[3];
+
+                if (y.length === 2) {
+                    y = "20" + y;
+                }
+
+                const months = [
+                    "jan", "feb", "mar", "apr", "may", "jun",
+                    "jul", "aug", "sep", "oct", "nov", "dec"
+                ];
+
+                let mn =
+                    months.findIndex(
+                        x => mon.toLowerCase().startsWith(x)
+                    ) + 1;
+
+                if (!mn) {
+                    mn = Number(mon);
+                }
+
+                if (mn) {
+
+                    return `${y}-${String(mn).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+                }
+
+            }
+
+            const dt = new Date(v);
+
+            if (isNaN(dt)) {
+                return "";
+            }
+
+            return dt.toISOString().slice(0, 10);
+
+        }
+
+
+        function pick(obj, ...names) {
+
+            for (const n of names) {
+
+                if (
+                    obj[n] !== undefined &&
+                    obj[n] !== ""
+                ) {
+
+                    return obj[n];
+
+                }
+
+            }
+
+            return "";
+
+        }
+
+
+        function loadCSV(file) {
+
+            const reader = new FileReader();
+
+            reader.onload = function (e) {
+
+                const rows = csvParse(e.target.result);
+
+                if (rows.length < 2) {
+
+                    alert(
+                        "The CSV file has no data."
+                    );
+
+                    return;
+
+                }
+
+
+                const headers =
+                    rows[0].map(
+                        (h, i) => norm(h) || `col${i}`
+                    );
+
+
+                rawData =
+                    rows.slice(1)
+                        .map((arr, index) => {
+
+                            const o = {};
+
+                            headers.forEach(
+                                (h, i) => {
+                                    o[h] = (arr[i] || "").trim();
+                                }
+                            );
+
+
+                            const date =
+                                parseDateValue(
+                                    pick(o, "date")
+                                );
+
+
+                            const status =
+                                canonicalStatus(
+                                    pick(
+                                        o,
+                                        "attendancestatus",
+                                        "status",
+                                        "attendance"
+                                    )
+                                );
+
+
+                            const firstLogin =
+                                pick(o, "firstlogin", "login1", "login");
+
+                            const afternoonLogout =
+                                pick(o, "afternooncheckout", "afternoonlogout", "lunchout", "logout1", "afternoonout");
+
+                            const afternoonLogin =
+                                pick(o, "afternooncheckin", "afternoonlogin", "lunchin", "login2", "afternoonin");
+
+                            const lastLogout =
+                                pick(o, "lastlogout", "logout2", "logout");
+
+                            const firstLoginMin = timeToMinutes(firstLogin);
+                            const afternoonLoginMin = timeToMinutes(afternoonLogin);
+
+                            let morningLate = 0;
+                            if (
+                                firstLoginMin !== null &&
+                                firstLoginMin > WORK_START &&
+                                status !== "SUNDAY / WEEKLY OFF" &&
+                                status !== "ABSENT"
+                            ) {
+                                morningLate = firstLoginMin - WORK_START;
+                            }
+
+                            let afternoonLate = 0;
+                            if (
+                                afternoonLoginMin !== null &&
+                                afternoonLoginMin > LUNCH_END &&
+                                status !== "SUNDAY / WEEKLY OFF" &&
+                                status !== "ABSENT"
+                            ) {
+                                afternoonLate = afternoonLoginMin - LUNCH_END;
+                            }
+
+                            const explicitLate = Number(
+                                pick(
+                                    o,
+                                    "totallateminutes",
+                                    "lateminutes",
+                                    "late"
+                                )
+                            );
+
+                            const lateMinutes = !isNaN(explicitLate) && explicitLate > 0
+                                ? explicitLate
+                                : (morningLate + afternoonLate);
+
+                            return {
+
+                                _index: index + 2,
+
+                                date: date,
+
+                                day:
+                                    pick(o, "day") ||
+                                    getDayName(date),
+
+                                employeeId:
+                                    pick(
+                                        o,
+                                        "employeeid",
+                                        "empid",
+                                        "employee"
+                                    ),
+
+                                employeeName:
+                                    pick(
+                                        o,
+                                        "employeename",
+                                        "name"
+                                    ),
+
+                                status: status,
+
+                                attendanceValue:
+                                    Number(
+                                        pick(
+                                            o,
+                                            "attendancevalue",
+                                            "value"
+                                        )
+                                    ) || (status === "FULL DAY PRESENT" ? 1 : status.includes("HALF DAY") ? 0.5 : 0),
+
+                                lateMinutes: lateMinutes,
+
+                                morningLateMinutes: morningLate,
+
+                                afternoonLateMinutes: afternoonLate,
+
+                                lateFine:
+                                    Number(
+                                        pick(
+                                            o,
+                                            "latefineinr",
+                                            "latefine",
+                                            "fine"
+                                        )
+                                    ) || 0,
+
+                                firstLogin: firstLogin,
+
+                                afternoonLogout: afternoonLogout,
+
+                                afternoonLogin: afternoonLogin,
+
+                                lastLogout: lastLogout,
+
+                                punchCount:
+                                    Number(
+                                        pick(o, "punchcount")
+                                    ) || 0,
+
+                                punchTimes:
+                                    pick(o, "punchtimes")
+
+                            };
+
+                        })
+                        .filter(
+                            x => x.employeeId || x.employeeName
+                        );
+
+
+                filteredData = [...rawData];
+
+
+                localStorage.setItem(
+                    "attendanceRawTXTDataV3",
+                    JSON.stringify(rawData)
+                );
+
+
+                fileInfo.textContent =
+                    `Loaded CSV: ${file.name} • ${rawData.length} records`;
+
+
+                sideStatus.textContent =
+                    `${file.name.slice(0, 22).toUpperCase()} LOADED`;
+
+
+                populateEmployees();
+
+                resetFilters();
+
+                renderAll();
+
+                showPage("dashboard");
+
+            };
+
+            reader.readAsText(file);
+
+        }
+
+
+        /* =========================================================
+           EXCEL SUPPORT
+        ========================================================= */
+
+        function excelDate(v) {
+
+            if (
+                v === null ||
+                v === undefined ||
+                String(v).trim() === ""
+            ) {
+                return "";
+            }
+
+
+            if (
+                v instanceof Date &&
+                !isNaN(v.getTime())
+            ) {
+
+                return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")
+                    }-${String(v.getDate()).padStart(2, "0")
+                    }`;
+
+            }
+
+
+            if (typeof v === "number") {
+
+                if (!Number.isFinite(v) || v < 1) {
+                    return "";
+                }
+
+                const p =
+                    XLSX.SSF.parse_date_code(
+                        Math.floor(v)
+                    );
+
+                if (
+                    p &&
+                    p.y >= 2000 &&
+                    p.y <= 2100
+                ) {
+
+                    return `${p.y}-${String(p.m).padStart(2, "0")
+                        }-${String(p.d).padStart(2, "0")
+                        }`;
+
+                }
+
+                return "";
+
+            }
+
+
+            return parseDateValue(v);
+
+        }
+
+
+        function timeToMinutes(v) {
+
+            if (
+                v === null ||
+                v === undefined ||
+                v === ""
+            ) {
+                return null;
+            }
+
+
+            if (v instanceof Date) {
+
+                return (
+                    v.getHours() * 60 +
+                    v.getMinutes()
+                );
+
+            }
+
+
+            if (
+                typeof v === "number" &&
+                v >= 0 &&
+                v < 1
+            ) {
+
+                return Math.round(
+                    v * 24 * 60
+                );
+
+            }
+
+
+            const s = String(v).trim();
+
+            const m =
+                s.match(
+                    /^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i
+                );
+
+
+            if (m) {
+
+                let h = Number(m[1]);
+                const mi = Number(m[2]);
+                const ap = (m[3] || "").toUpperCase();
+
+                if (ap === "PM" && h < 12) {
+                    h += 12;
+                }
+
+                if (ap === "AM" && h === 12) {
+                    h = 0;
+                }
+
+                return h * 60 + mi;
+
+            }
+
+
+            return null;
+
+        }
+
+
+        function sheetRowsToObjects(ws) {
+
+            const rows =
+                XLSX.utils.sheet_to_json(
+                    ws,
+                    {
+                        header: 1,
+                        defval: "",
+                        raw: true
+                    }
+                );
+
+
+            if (!rows.length) {
+                return [];
+            }
+
+
+            const headers =
+                rows[0].map(
+                    (h, i) => norm(h) || `col${i}`
+                );
+
+
+            return rows
+                .slice(1)
+                .map(arr => {
+
+                    const o = {};
+
+                    headers.forEach(
+                        (h, i) => {
+                            o[h] = arr[i] ?? "";
+                        }
+                    );
+
+                    return o;
+
+                });
+
+        }
+
+
+        function loadExcel(file) {
+
+            const reader = new FileReader();
+
+            reader.onload = function (e) {
+
+                try {
+
+                    const wb =
+                        XLSX.read(
+                            new Uint8Array(e.target.result),
+                            {
+                                type: "array",
+                                cellDates: true
+                            }
+                        );
+
+
+                    const punchName =
+                        wb.SheetNames.find(
+                            n => norm(n) === "punchingtime"
+                        ) ||
+                        wb.SheetNames.find(
+                            n => norm(n).includes("punch")
+                        );
+
+
+                    if (!punchName) {
+
+                        alert(
+                            "Could not find the Punching time sheet."
+                        );
+
+                        return;
+
+                    }
+
+
+                    const punch =
+                        sheetRowsToObjects(
+                            wb.Sheets[punchName]
+                        );
+
+
+                    rawData =
+                        punch
+                            .map((o, i) => {
+
+                                const id =
+                                    String(
+                                        pick(
+                                            o,
+                                            "empid",
+                                            "employeeid",
+                                            "id"
+                                        )
+                                    ).trim();
+
+
+                                const name =
+                                    String(
+                                        pick(
+                                            o,
+                                            "name",
+                                            "nameofemployee",
+                                            "employeename"
+                                        )
+                                    ).trim();
+
+
+                                const date =
+                                    excelDate(
+                                        pick(o, "date")
+                                    );
+
+
+                                const logins = [];
+                                const logouts = [];
+
+
+                                for (
+                                    let n = 1;
+                                    n <= 5;
+                                    n++
+                                ) {
+
+                                    const li =
+                                        n === 1
+                                            ? o["login"]
+                                            : o[`login${n}`];
+
+
+                                    const lo =
+                                        n === 1
+                                            ? o["logout"]
+                                            : o[`logout${n}`];
+
+
+                                    const a =
+                                        timeToMinutes(li);
+
+
+                                    const b =
+                                        timeToMinutes(lo);
+
+
+                                    if (a !== null) {
+                                        logins.push(a);
+                                    }
+
+                                    if (b !== null) {
+                                        logouts.push(b);
+                                    }
+
+                                }
+
+
+                                const first =
+                                    logins.length
+                                        ? Math.min(...logins)
+                                        : null;
+
+
+                                const last =
+                                    logouts.length
+                                        ? Math.max(...logouts)
+                                        : null;
+
+
+                                let status =
+                                    "FULL DAY PRESENT";
+
+
+                                if (
+                                    first === null &&
+                                    last === null
+                                ) {
+
+                                    status = "ABSENT";
+
+                                }
+
+                                else if (
+                                    date &&
+                                    new Date(
+                                        date + "T12:00:00"
+                                    ).getDay() === 0
+                                ) {
+
+                                    status = "SUNDAY / WEEKLY OFF";
+
+                                }
+
+                                else if (
+                                    first !== null &&
+                                    first < 12 * 60 &&
+                                    last !== null &&
+                                    last < HALF_DAY_CUTOFF
+                                ) {
+
+                                    status = "HALF DAY - MORNING";
+
+                                }
+
+                                else if (
+                                    first !== null &&
+                                    first >= HALF_DAY_CUTOFF
+                                ) {
+
+                                    status = "HALF DAY - AFTERNOON";
+
+                                }
+
+
+                                let afternoonLogoutMin = null;
+                                let afternoonLoginMin = null;
+
+                                if (logouts.length >= 2) {
+                                    afternoonLogoutMin = logouts[0];
+                                } else {
+                                    afternoonLogoutMin = logouts.find(m => m >= 13 * 60 && m <= 15 * 60) || null;
+                                }
+
+                                if (logins.length >= 2) {
+                                    afternoonLoginMin = logins[1];
+                                } else {
+                                    afternoonLoginMin = logins.find(m => m >= 14 * 60 && m <= 16 * 60) || null;
+                                }
+
+                                let morningLate = 0;
+                                if (
+                                    first !== null &&
+                                    first > WORK_START &&
+                                    status !== "SUNDAY / WEEKLY OFF" &&
+                                    status !== "ABSENT"
+                                ) {
+                                    morningLate = first - WORK_START;
+                                }
+
+                                let afternoonLate = 0;
+                                if (
+                                    afternoonLoginMin !== null &&
+                                    afternoonLoginMin > LUNCH_END &&
+                                    status !== "SUNDAY / WEEKLY OFF" &&
+                                    status !== "ABSENT"
+                                ) {
+                                    afternoonLate = afternoonLoginMin - LUNCH_END;
+                                }
+
+                                const totalLate = morningLate + afternoonLate;
+
+                                return {
+
+                                    _index: i + 2,
+
+                                    date: date,
+
+                                    day: getDayName(date),
+
+                                    employeeId: id,
+
+                                    employeeName: name || id,
+
+                                    status: status,
+
+                                    attendanceValue:
+                                        status === "FULL DAY PRESENT"
+                                            ? 1
+                                            : status.includes("HALF DAY")
+                                                ? .5
+                                                : 0,
+
+                                    lateMinutes: totalLate,
+
+                                    morningLateMinutes: morningLate,
+
+                                    afternoonLateMinutes: afternoonLate,
+
+                                    lateFine: 0,
+
+                                    firstLogin:
+                                        minutesToTime(first),
+
+                                    afternoonLogout:
+                                        minutesToTime(afternoonLogoutMin),
+
+                                    afternoonLogin:
+                                        minutesToTime(afternoonLoginMin),
+
+                                    lastLogout:
+                                        minutesToTime(last),
+
+                                    punchCount:
+                                        logins.length +
+                                        logouts.length
+
+                                };
+
+                            })
+                            .filter(
+                                x => (x.employeeId || x.employeeName) &&
+                                    x.date
+                            );
+
+
+                    filteredData = [...rawData];
+
+
+                    localStorage.setItem(
+                        "attendanceRawTXTDataV3",
+                        JSON.stringify(rawData)
+                    );
+
+
+                    fileInfo.textContent =
+                        `Loaded Excel: ${file.name} • ${rawData.length} records`;
+
+
+                    sideStatus.textContent =
+                        `${file.name.slice(0, 22).toUpperCase()} LOADED`;
+
+
+                    populateEmployees();
+
+                    resetFilters();
+
+                    renderAll();
+
+                    showPage("dashboard");
+
+
+                } catch (err) {
+
+                    console.error(err);
+
+                    alert(
+                        "Could not read this Excel file."
+                    );
+
+                }
+
+            };
+
+            reader.readAsArrayBuffer(file);
+
+        }
+
+
+        /* =========================================================
+           FILE INPUT
+        ========================================================= */
+
+        attendanceFile.addEventListener(
+            "change",
+            function (e) {
+
+                const file = e.target.files[0];
+
+                if (!file) {
+                    return;
+                }
+
+
+                if (
+                    /\.txt$/i.test(file.name)
+                ) {
+
+                    loadTXT(file);
+
+                }
+
+                else if (
+                    /\.csv$/i.test(file.name)
+                ) {
+
+                    loadCSV(file);
+
+                }
+
+                else if (
+                    /\.xlsx?$/i.test(file.name)
+                ) {
+
+                    loadExcel(file);
+
+                }
+
+                else {
+
+                    alert(
+                        "Please upload TXT, CSV, XLSX or XLS."
+                    );
+
+                }
+
+            }
+        );
+
+
+        /* =========================================================
+           DRAG & DROP
+        ========================================================= */
+
+        const dz =
+            document.getElementById(
+                "dropZone"
+            );
+
+
+        ["dragenter", "dragover"].forEach(
+            eventName => {
+
+                dz.addEventListener(
+                    eventName,
+                    function (e) {
+
+                        e.preventDefault();
+
+                        dz.classList.add("drag");
+
+                    }
+                );
+
+            }
+        );
+
+
+        ["dragleave", "drop"].forEach(
+            eventName => {
+
+                dz.addEventListener(
+                    eventName,
+                    function (e) {
+
+                        e.preventDefault();
+
+                        dz.classList.remove("drag");
+
+                    }
+                );
+
+            }
+        );
+
+
+        dz.addEventListener(
+            "drop",
+            function (e) {
+
+                const file =
+                    e.dataTransfer.files[0];
+
+                if (!file) {
+                    return;
+                }
+
+
+                if (
+                    /\.txt$/i.test(file.name)
+                ) {
+
+                    loadTXT(file);
+
+                }
+
+                else if (
+                    /\.csv$/i.test(file.name)
+                ) {
+
+                    loadCSV(file);
+
+                }
+
+                else if (
+                    /\.xlsx?$/i.test(file.name)
+                ) {
+
+                    loadExcel(file);
+
+                }
+
+                else {
+
+                    alert(
+                        "Please upload TXT, CSV, XLSX or XLS."
+                    );
+
+                }
+
+            }
+        );
+
+
+        /* =========================================================
+           EMPLOYEE DROPDOWN
+        ========================================================= */
+
+        function populateEmployees() {
+
+            const current =
+                employeeFilter.value;
+
+
+            const map =
+                new Map();
+
+
+            rawData.forEach(x => {
+
+                const id =
+                    x.employeeId ||
+                    x.employeeName;
+
+
+                if (!map.has(id)) {
+
+                    map.set(
+                        id,
+                        {
+                            id: id,
+                            name:
+                                x.employeeName ||
+                                id
+                        }
+                    );
+
+                }
+
+            });
+
+
+            const employees =
+                [...map.values()]
+                    .sort(
+                        (a, b) =>
+                            String(a.name)
+                                .localeCompare(
+                                    String(b.name)
+                                )
+                    );
+
+
+            employeeFilter.innerHTML =
+                '<option value="">All Employees</option>' +
+
+                employees
+                    .map(
+                        e =>
+                            `<option value="${escapeHtml(e.id)}">
+     ${escapeHtml(e.name)}
+     (${escapeHtml(e.id)})
+    </option>`
+                    )
+                    .join("");
+
+
+            employeeFilter.value = current;
+
+        }
+
+
+        /* =========================================================
+           FILTERS
+        ========================================================= */
+
+        function applyFilters() {
+
+            const q =
+                searchInput.value
+                    .toLowerCase()
+                    .trim();
+
+
+            const date =
+                dateFilter.value;
+
+
+            const status =
+                statusFilter.value;
+
+
+            const emp =
+                employeeFilter.value;
+
+
+            filteredData =
+                rawData.filter(x =>
+
+                    (
+                        !q ||
+                        `${x.employeeId} ${x.employeeName}`
+                            .toLowerCase()
+                            .includes(q)
+                    )
+
+                    &&
+
+                    (
+                        !date ||
+                        x.date === date
+                    )
+
+                    &&
+
+                    (
+                        !status ||
+                        x.status === status
+                    )
+
+                    &&
+
+                    (
+                        !emp ||
+                        x.employeeId === emp
+                    )
+
+                );
+
+
+            renderAll();
+
+        }
+
+
+        function resetFilters() {
+
+            searchInput.value = "";
+            dateFilter.value = "";
+            statusFilter.value = "";
+            employeeFilter.value = "";
+
+            filteredData = [...rawData];
+
+            renderAll();
+
+        }
+
+
+        /* =========================================================
+           BADGES
+        ========================================================= */
+
+        function badge(status) {
+
+            let cls = "b-gray";
+
+            if (status === "FULL DAY PRESENT") {
+                cls = "b-green";
+            }
+
+            else if (
+                status.includes("MORNING")
+            ) {
+
+                cls = "b-amber";
+
+            }
+
+            else if (
+                status.includes("AFTERNOON")
+            ) {
+
+                cls = "b-purple";
+
+            }
+
+            else if (
+                status === "ABSENT"
+            ) {
+
+                cls = "b-red";
+
+            }
+
+            return `
+ <span class="badge ${cls}">
+ ${escapeHtml(status)}
+ </span>
+ `;
+
+        }
+
+
+        /* =========================================================
+           STATISTICS
+        ========================================================= */
+
+        function stats(data = filteredData) {
+
+            const count =
+                status =>
+                    data.filter(
+                        x => x.status === status
+                    ).length;
+
+
+            return {
+
+                emp:
+                    new Set(
+                        data.map(
+                            x => x.employeeId || x.employeeName
+                        )
+                    ).size,
+
+                full:
+                    count("FULL DAY PRESENT"),
+
+                morning:
+                    count("HALF DAY - MORNING"),
+
+                afternoon:
+                    count("HALF DAY - AFTERNOON"),
+
+                absent:
+                    count("ABSENT"),
+
+                late:
+                    data.reduce(
+                        (a, x) =>
+                            a +
+                            Number(x.lateMinutes || 0),
+                        0
+                    )
+
+            };
+
+        }
+
+
+        /* =========================================================
+           DASHBOARD
+        ========================================================= */
+
+        function renderDashboard() {
+
+            const s = stats();
+
+
+            kEmp.textContent = s.emp;
+            kFull.textContent = s.full;
+            kMorning.textContent = s.morning;
+            kAfternoon.textContent = s.afternoon;
+            kAbsent.textContent = s.absent;
+            kLate.textContent = s.late;
+
+
+            Object.values(charts)
+                .forEach(
+                    c => {
+                        try {
+                            c.destroy();
+                        } catch (e) { }
+                    }
+                );
+
+
+            charts = {};
+
+
+            if (!filteredData.length) {
+                return;
+            }
+
+
+            charts.status =
+                new Chart(
+                    statusChart,
+                    {
+                        type: "doughnut",
+
+                        data: {
+                            labels: [
+                                "Full Day",
+                                "Morning Half",
+                                "Afternoon Half",
+                                "Absent"
+                            ],
+
+                            datasets: [
+                                {
+                                    data: [
+                                        s.full,
+                                        s.morning,
+                                        s.afternoon,
+                                        s.absent
+                                    ],
+
+                                    backgroundColor: [
+                                        "#1fa774",
+                                        "#e99a22",
+                                        "#7654d6",
+                                        "#dc4c64"
+                                    ]
+                                }
+                            ]
+                        },
+
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+
+                    }
+                );
+
+
+            const emMap = new Map();
+
+
+            filteredData.forEach(x => {
+
+                const id =
+                    x.employeeId ||
+                    x.employeeName;
+
+
+                if (!emMap.has(id)) {
+
+                    emMap.set(
+                        id,
+                        {
+                            name: x.employeeName || id,
+                            mins: 0
+                        }
+                    );
+
+                }
+
+
+                emMap.get(id).mins +=
+                    Number(x.lateMinutes || 0);
+
+            });
+
+
+            const em =
+                [...emMap.values()]
+                    .sort(
+                        (a, b) => b.mins - a.mins
+                    );
+
+
+            charts.late =
+                new Chart(
+                    lateChart,
+                    {
+                        type: "bar",
+
+                        data: {
+                            labels:
+                                em.map(x => x.name),
+
+                            datasets: [
+                                {
+                                    label: "Late Minutes",
+                                    data:
+                                        em.map(x => x.mins),
+
+                                    backgroundColor: "#3157d5"
+                                }
+                            ]
+                        },
+
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            indexAxis: "y",
+
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            }
+                        }
+
+                    }
+                );
+
+
+            const byDate = {};
+
+
+            filteredData.forEach(x => {
+
+                if (!x.date) {
+                    return;
+                }
+
+
+                if (!byDate[x.date]) {
+                    byDate[x.date] = 0;
+                }
+
+
+                if (
+                    x.status === "FULL DAY PRESENT"
+                ) {
+
+                    byDate[x.date]++;
+
+                }
+
+            });
+
+
+            const dates =
+                Object.keys(byDate)
+                    .sort();
+
+
+            charts.daily =
+                new Chart(
+                    dailyChart,
+                    {
+                        type: "line",
+
+                        data: {
+                            labels:
+                                dates.map(
+                                    x => formatDate(x)
+                                ),
+
+                            datasets: [
+                                {
+                                    label: "Full Day Present",
+
+                                    data:
+                                        dates.map(
+                                            x => byDate[x]
+                                        ),
+
+                                    borderColor: "#3157d5",
+
+                                    backgroundColor:
+                                        "rgba(49,87,213,.12)",
+
+                                    fill: true,
+
+                                    tension: .3
+                                }
+                            ]
+                        },
+
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+
+                    }
+                );
+
+        }
+
+
+        /* =========================================================
+           RECORD TABLE
+        ========================================================= */
+
+        function renderRecords() {
+
+            filterInfo.textContent =
+                rawData.length
+                    ? `Showing ${filteredData.length} of ${rawData.length} employee/day records.`
+                    : "No attendance file uploaded yet.";
+
+
+            if (!filteredData.length) {
+
+                recordRows.innerHTML =
+                    `
+   <tr>
+    <td colspan="12" class="empty">
+     Upload a TXT attendance file to display data.
+    </td>
+   </tr>
+   `;
+
+                return;
+
+            }
+
+
+            recordRows.innerHTML =
+                filteredData
+                    .map(x => {
+
+                        const afternoonLoginHtml = x.afternoonLogin ? (
+                            (x.afternoonLateMinutes || 0) > 0
+                                ? `${escapeHtml(x.afternoonLogin)} <span style="font-size:10px;color:#dc4c64;font-weight:700;background:#fff0f2;padding:2px 5px;border-radius:4px;">(+${x.afternoonLateMinutes}m)</span>`
+                                : escapeHtml(x.afternoonLogin)
+                        ) : "—";
+
+                        const lateMinHtml = (x.lateMinutes || 0) > 0 ? (
+                            ((x.morningLateMinutes || 0) > 0 && (x.afternoonLateMinutes || 0) > 0)
+                                ? `<b>${x.lateMinutes}</b> <span style="font-size:10px;color:var(--muted);display:block;">(M:${x.morningLateMinutes}m + A:${x.afternoonLateMinutes}m)</span>`
+                                : ((x.afternoonLateMinutes || 0) > 0 && !(x.morningLateMinutes || 0))
+                                    ? `<b>${x.lateMinutes}</b> <span style="font-size:10px;color:#c63850;display:block;">(Aft: ${x.afternoonLateMinutes}m)</span>`
+                                    : `<b>${x.lateMinutes}</b>`
+                        ) : "0";
+
+                        return `
+   <tr>
+
+    <td>
+     ${formatDate(x.date)}
+    </td>
+
+    <td>
+     ${escapeHtml(x.day || "—")}
+    </td>
+
+    <td>
+     ${escapeHtml(x.employeeId)}
+    </td>
+
+    <td>
+     ${escapeHtml(x.employeeName)}
+    </td>
+
+    <td>
+     ${badge(x.status)}
+    </td>
+
+    <td>
+     ${x.attendanceValue}
+    </td>
+
+    <td>
+     ${x.firstLogin || "—"}
+    </td>
+
+    <td>
+     ${x.afternoonLogout || "—"}
+    </td>
+
+    <td>
+     ${afternoonLoginHtml}
+    </td>
+
+    <td>
+     ${x.lastLogout || "—"}
+    </td>
+
+    <td>
+     ${x.punchCount || 0}
+    </td>
+
+    <td>
+     ${lateMinHtml}
+    </td>
+
+   </tr>
+   `;
+
+                    })
+                    .join("");
+
+        }
+
+
+        /* =========================================================
+           EMPLOYEE SUMMARY
+        ========================================================= */
+
+        function employeeSummary() {
+
+            const map = new Map();
+
+
+            filteredData.forEach(x => {
+
+                const key =
+                    x.employeeId ||
+                    x.employeeName;
+
+
+                if (!map.has(key)) {
+
+                    map.set(
+                        key,
+                        {
+                            id: x.employeeId,
+                            name: x.employeeName,
+                            full: 0,
+                            morning: 0,
+                            afternoon: 0,
+                            absent: 0,
+                            weeklyOff: 0,
+                            leaveDates: new Set(),
+                            lateMinutes: 0
+                        }
+                    );
+
+                }
+
+
+                const a = map.get(key);
+
+
+                if (
+                    x.status === "FULL DAY PRESENT"
+                ) {
+
+                    a.full++;
+
+                }
+
+
+                if (
+                    x.status === "HALF DAY - MORNING"
+                ) {
+
+                    a.morning++;
+
+                    if (x.date) {
+                        a.leaveDates.add(x.date);
+                    }
+
+                }
+
+
+                if (
+                    x.status === "HALF DAY - AFTERNOON"
+                ) {
+
+                    a.afternoon++;
+
+                    if (x.date) {
+                        a.leaveDates.add(x.date);
+                    }
+
+                }
+
+
+                if (
+                    x.status === "ABSENT"
+                ) {
+
+                    a.absent++;
+
+                    if (x.date) {
+                        a.leaveDates.add(x.date);
+                    }
+
+                }
+
+
+                if (
+                    x.status === "SUNDAY / WEEKLY OFF"
+                ) {
+
+                    a.weeklyOff++;
+
+                }
+
+
+                a.lateMinutes +=
+                    Number(x.lateMinutes || 0);
+
+            });
+
+
+            return [...map.values()]
+                .map(x => {
+
+                    const dates =
+                        [...x.leaveDates]
+                            .sort();
+
+
+                    return {
+
+                        ...x,
+
+                        leaveCount:
+                            dates.length,
+
+                        leaveDates:
+                            dates,
+
+                        presentEquivalent:
+                            x.full +
+                            (
+                                x.morning +
+                                x.afternoon
+                            ) * .5
+
+                    };
+
+                });
+
+        }
+
+
+        /* =========================================================
+           EMPLOYEE REPORT
+        ========================================================= */
+
+        function renderEmployeeReport() {
+
+            const q =
+                (
+                    employeeReportSearch.value ||
+                    ""
+                )
+                    .toLowerCase();
+
+
+            const sort =
+                employeeSort.value;
+
+
+            let data =
+                employeeSummary()
+                    .filter(
+                        x =>
+                            `${x.id} ${x.name}`
+                                .toLowerCase()
+                                .includes(q)
+                    );
+
+
+            data.sort(
+                (a, b) => {
+
+                    if (sort === "present") {
+                        return b.presentEquivalent -
+                            a.presentEquivalent;
+                    }
+
+                    if (sort === "late") {
+                        return b.lateMinutes -
+                            a.lateMinutes;
+                    }
+
+                    return String(a.name)
+                        .localeCompare(
+                            String(b.name)
+                        );
+
+                }
+            );
+
+
+            if (!data.length) {
+
+                employeeRows.innerHTML =
+                    `
+   <tr>
+    <td colspan="10" class="empty">
+     No data to display.
+    </td>
+   </tr>
+   `;
+
+                return;
+
+            }
+
+
+            employeeRows.innerHTML =
+                data.map(x => {
+
+                    const leaveDates =
+                        x.leaveDates
+                            .map(
+                                d => formatDate(d)
+                            )
+                            .join(", ") || "—";
+
+
+                    return `
+   <tr>
+
+    <td>
+     ${escapeHtml(x.id)}
+    </td>
+
+    <td>
+     <b>
+      ${escapeHtml(x.name)}
+     </b>
+    </td>
+
+    <td>
+     ${x.full}
+    </td>
+
+    <td>
+     ${x.morning}
+    </td>
+
+    <td>
+     ${x.afternoon}
+    </td>
+
+    <td>
+     ${x.absent}
+    </td>
+
+    <td>
+     ${x.presentEquivalent}
+    </td>
+
+    <td>
+     ${x.leaveCount}
+    </td>
+
+    <td style="white-space:normal;min-width:200px">
+     ${escapeHtml(leaveDates)}
+    </td>
+
+    <td>
+     ${x.lateMinutes}
+    </td>
+
+   </tr>
+   `;
+
+                })
+                    .join("");
+
+        }
+
+
+        /* =========================================================
+           DATE REPORT
+        ========================================================= */
+
+        function renderDates() {
+
+            const map = new Map();
+
+
+            filteredData.forEach(x => {
+
+                if (!x.date) {
+                    return;
+                }
+
+
+                if (!map.has(x.date)) {
+
+                    map.set(
+                        x.date,
+                        {
+                            day: x.day,
+                            full: 0,
+                            morning: 0,
+                            afternoon: 0,
+                            absent: 0,
+                            off: 0,
+                            lateEmp: new Set(),
+                            lateMinutes: 0
+                        }
+                    );
+
+                }
+
+
+                const a = map.get(x.date);
+
+
+                if (
+                    x.status === "FULL DAY PRESENT"
+                ) {
+                    a.full++;
+                }
+
+
+                if (
+                    x.status === "HALF DAY - MORNING"
+                ) {
+                    a.morning++;
+                }
+
+
+                if (
+                    x.status === "HALF DAY - AFTERNOON"
+                ) {
+                    a.afternoon++;
+                }
+
+
+                if (
+                    x.status === "ABSENT"
+                ) {
+                    a.absent++;
+                }
+
+
+                if (
+                    x.status === "SUNDAY / WEEKLY OFF"
+                ) {
+                    a.off++;
+                }
+
+
+                if (
+                    Number(x.lateMinutes) > 0
+                ) {
+
+                    a.lateEmp.add(
+                        x.employeeId ||
+                        x.employeeName
+                    );
+
+                    a.lateMinutes +=
+                        Number(x.lateMinutes);
+
+                }
+
+            });
+
+
+            const arr =
+                [...map.entries()]
+                    .sort(
+                        (a, b) =>
+                            a[0].localeCompare(b[0])
+                    );
+
+
+            if (!arr.length) {
+
+                dateRows.innerHTML =
+                    `
+   <tr>
+    <td colspan="9" class="empty">
+     No data to display.
+    </td>
+   </tr>
+   `;
+
+                return;
+
+            }
+
+
+            dateRows.innerHTML =
+                arr.map(
+                    ([date, x]) =>
+                        `
+   <tr>
+
+    <td>
+     ${formatDate(date)}
+    </td>
+
+    <td>
+     ${escapeHtml(x.day)}
+    </td>
+
+    <td>
+     ${x.full}
+    </td>
+
+    <td>
+     ${x.morning}
+    </td>
+
+    <td>
+     ${x.afternoon}
+    </td>
+
+    <td>
+     ${x.absent}
+    </td>
+
+    <td>
+     ${x.off}
+    </td>
+
+    <td>
+     ${x.lateEmp.size}
+    </td>
+
+    <td>
+     ${x.lateMinutes}
+    </td>
+
+   </tr>
+   `
+                )
+                    .join("");
+
+        }
+
+
+        /* =========================================================
+           RAW PREVIEW
+        ========================================================= */
+
+        function renderRawPreview() {
+
+            const preview =
+                rawLines
+                    .slice(0, 30)
+                    .join("\n");
+
+
+            rawPreview.textContent =
+                preview ||
+                "No raw data loaded.";
+
+
+            rawInfo.textContent =
+                rawLines.length
+                    ? `Showing first ${Math.min(rawLines.length, 30)} raw lines out of ${rawLines.length}.`
+                    : "No raw data loaded.";
+
+        }
+
+
+        /* =========================================================
+           RENDER EVERYTHING
+        ========================================================= */
+
+        function renderAll() {
+
+            renderDashboard();
+
+            renderRecords();
+
+            renderEmployeeReport();
+
+            renderDates();
+
+        }
+
+
+        /* =========================================================
+           NAVIGATION
+        ========================================================= */
+
+        function showPage(id) {
+
+            document
+                .querySelectorAll(".page")
+                .forEach(
+                    x => x.classList.remove("active")
+                );
+
+
+            const page =
+                document.getElementById(id);
+
+
+            if (page) {
+                page.classList.add("active");
+            }
+
+
+            document
+                .querySelectorAll(".nav button")
+                .forEach(
+                    x =>
+                        x.classList.toggle(
+                            "active",
+                            x.dataset.page === id
+                        )
+                );
+
+
+            const titles = {
+
+                dashboard:
+                    "Attendance Dashboard",
+
+                records:
+                    "Attendance Records",
+
+                employees:
+                    "Employee-wise Report",
+
+                dates:
+                    "Date-wise Report",
+
+                raw:
+                    "Raw Data Preview",
+
+                upload:
+                    "Upload Attendance File"
+
+            };
+
+
+            pageTitle.textContent =
+                titles[id] ||
+                "Attendance Dashboard";
+
+        }
+
+
+        document
+            .querySelectorAll(".nav button")
+            .forEach(
+                button => {
+
+                    button.onclick =
+                        () => {
+                            showPage(
+                                button.dataset.page
+                            );
+                        };
+
+                }
+            );
+
+
+        /* =========================================================
+           EXPORT
+        ========================================================= */
+
+        function exportFilteredCSV() {
+
+            if (!filteredData.length) {
+
+                alert(
+                    "No processed data available to export."
+                );
+
+                return;
+
+            }
+
+
+            const headers = [
+
+                "Date",
+                "Day",
+                "Employee ID",
+                "Employee Name",
+                "Attendance Status",
+                "Attendance Value",
+                "First Login",
+                "Afternoon Check-out",
+                "Afternoon Check-in",
+                "Last Logout",
+                "Punch Count",
+                "Punch Times",
+                "Morning Late Minutes",
+                "Afternoon Late Minutes",
+                "Total Late Minutes"
+
+            ];
+
+
+            const rows = [
+                headers,
+
+                ...filteredData.map(
+                    x => [
+
+                        formatDate(x.date),
+
+                        x.day,
+
+                        x.employeeId,
+
+                        x.employeeName,
+
+                        x.status,
+
+                        x.attendanceValue,
+
+                        x.firstLogin,
+
+                        x.afternoonLogout || "",
+
+                        x.afternoonLogin || "",
+
+                        x.lastLogout,
+
+                        x.punchCount,
+
+                        x.punchTimes,
+
+                        x.morningLateMinutes || 0,
+
+                        x.afternoonLateMinutes || 0,
+
+                        x.lateMinutes || 0
+
+                    ]
+                )
+
+            ];
+
+
+            const csv =
+                rows
+                    .map(
+                        row =>
+                            row
+                                .map(
+                                    value =>
+                                        `"${String(value ?? "")
+                                            .replaceAll('"', '""')}"`
+                                )
+                                .join(",")
+                    )
+                    .join("\n");
+
+
+            const blob =
+                new Blob(
+                    [csv],
+                    { type: "text/csv;charset=utf-8;" }
+                );
+
+
+            const url =
+                URL.createObjectURL(blob);
+
+
+            const a =
+                document.createElement("a");
+
+
+            a.href = url;
+
+            a.download =
+                "processed_attendance_data.csv";
+
+
+            document.body.appendChild(a);
+
+            a.click();
+
+            document.body.removeChild(a);
+
+            URL.revokeObjectURL(url);
+
+        }
+
+
+        /* =========================================================
+           CLEAR DATA
+        ========================================================= */
+
+        function clearData() {
+
+            if (
+                !confirm(
+                    "Clear all attendance data from this browser?"
+                )
+            ) {
+                return;
+            }
+
+
+            rawData = [];
+            filteredData = [];
+            rawLines = [];
+
+
+            localStorage.removeItem(
+                "attendanceRawTXTDataV3"
+            );
+
+
+            localStorage.removeItem(
+                "attendanceRawTXTPreviewV3"
+            );
+
+
+            fileInfo.textContent = "";
+
+            sideStatus.textContent =
+                "NO FILE LOADED";
+
+
+            populateEmployees();
+
+            renderRawPreview();
+
+            renderAll();
+
+        }
+
+
+        /* =========================================================
+           RESTORE PREVIOUS DATA
+        ========================================================= */
+
+        try {
+
+            const saved =
+                JSON.parse(
+                    localStorage.getItem(
+                        "attendanceRawTXTDataV3"
+                    ) || "[]"
+                );
+
+
+            if (
+                Array.isArray(saved) &&
+                saved.length
+            ) {
+
+                rawData = saved;
+
+                filteredData = [...saved];
+
+                populateEmployees();
+
+                sideStatus.textContent =
+                    "PREVIOUS DATA LOADED";
+
+            }
+
+
+            const savedRaw =
+                localStorage.getItem(
+                    "attendanceRawTXTPreviewV3"
+                );
+
+
+            if (savedRaw) {
+
+                rawLines =
+                    savedRaw
+                        .replace(/\r\n/g, "\n")
+                        .replace(/\r/g, "\n")
+                        .split("\n");
+
+                renderRawPreview();
+
+            }
+
+        } catch (e) {
+
+            console.error(
+                "Could not restore saved data",
+                e
+            );
+
+        }
+
+
+        /* =========================================================
+           INITIAL RENDER
+        ========================================================= */
+
+        renderAll();
+
+    </script>
+
+</body>
+
+</html>
