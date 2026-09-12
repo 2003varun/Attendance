@@ -37,6 +37,8 @@ jobs:
 
       - name: Build React application
         run: npm run build
+        env:
+          VITE_BASE_PATH: /Attendance/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
