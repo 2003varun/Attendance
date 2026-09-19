@@ -12,18 +12,42 @@ if SERVER_DIR not in sys.path:
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from sqlalchemy import inspect, text
 
 try:
-    from models import db, Employee, AttendanceRecord, LeaveRequest, LeaveBalance
+    from models import db, Employee, AttendanceRecord, LeaveRequest, LeaveBalance, Holiday
 except ImportError:
-    from server.models import db, Employee, AttendanceRecord, LeaveRequest, LeaveBalance
+    from server.models import db, Employee, AttendanceRecord, LeaveRequest, LeaveBalance, Holiday
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# SQLite database configuration
-DB_DIR = os.path.dirname(os.path.abspath(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(DB_DIR, 'attendance_os.db')}"
+# Configurable CORS
+cors_origins_env = os.getenv('CORS_ORIGINS', '*')
+if cors_origins_env == '*':
+    cors_origins = '*'
+else:
+    cors_origins = [orig.strip() for orig in cors_origins_env.split(',') if orig.strip()]
+
+CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials=True)
+
+# Database Configuration (Single Source of Truth)
+DATABASE_URL = os.getenv('DATABASE_URL')
+if DATABASE_URL:
+    # Normalize postgres:// to postgresql:// for SQLAlchemy 1.4+ / 2.0+
+    if DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300
+    }
+    print(f"[DB] Using shared database engine configured via DATABASE_URL.")
+else:
+    DB_DIR = os.path.dirname(os.path.abspath(__file__))
+    sqlite_path = os.path.join(DB_DIR, 'attendance_os.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{sqlite_path}"
+    print(f"[DB] No DATABASE_URL specified. Defaulting to local SQLite: {sqlite_path}")
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
@@ -45,6 +69,25 @@ SEED_EMPLOYEES = [
     { "employee_id": "428", "full_name": "Kavita Rao", "email": "kavita.r@company.com", "phone": "+1 (555) 234-5670", "department": "Human Resources", "designation": "HR Specialist", "joining_date": "2024-02-01", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" }
 ]
 
+INITIAL_HOLIDAYS = [
+    { "id": "h1", "date": "2026-01-01", "name": "New Year's Day", "type": "National Holiday" },
+    { "id": "h2", "date": "2026-01-26", "name": "Republic Day", "type": "National Holiday" },
+    { "id": "h3", "date": "2026-03-04", "name": "Holi", "type": "Gazetted Holiday" },
+    { "id": "h4", "date": "2026-05-01", "name": "Labor Day", "type": "Gazetted Holiday" },
+    { "id": "h5", "date": "2026-08-15", "name": "Independence Day", "type": "National Holiday" },
+    { "id": "h6", "date": "2026-10-02", "name": "Gandhi Jayanti", "type": "National Holiday" },
+    { "id": "h7", "date": "2026-10-20", "name": "Dussehra", "type": "Festival Holiday" },
+    { "id": "h8", "date": "2026-11-08", "name": "Diwali", "type": "Festival Holiday" },
+    { "id": "h9", "date": "2026-12-25", "name": "Christmas", "type": "Gazetted Holiday" }
+]
+
+DEFAULT_LEAVE_TYPES = [
+    { "id": "CL", "name": "Casual Leave", "defaultAllocated": 12.0, "description": "Standard personal or casual days off" },
+    { "id": "SL", "name": "Sick Leave", "defaultAllocated": 10.0, "description": "Medical reasons and sick rest" },
+    { "id": "EL", "name": "Earned Leave", "defaultAllocated": 15.0, "description": "Privilege/annual accrued leave" },
+    { "id": "UL", "name": "Unpaid Leave", "defaultAllocated": 30.0, "description": "Leave without pay (unrestricted)" }
+]
+
 def get_now():
     """Return timezone-aware UTC datetime or fallback to utcnow"""
     try:
@@ -53,7 +96,6 @@ def get_now():
         return datetime.utcnow()
 
 def safe_int(val, default=0):
-    """Safely convert any value (string, float, int) to integer without throwing ValueError"""
     if val is None:
         return default
     try:
@@ -62,7 +104,6 @@ def safe_int(val, default=0):
         return default
 
 def safe_float(val, default=0.0):
-    """Safely convert any value to float without throwing ValueError"""
     if val is None:
         return default
     try:
@@ -71,7 +112,6 @@ def safe_float(val, default=0.0):
         return default
 
 def find_employee(identifier):
-    """Lookup employee safely by employee_id string or integer database ID without SQL type mismatch"""
     ident_str = str(identifier).strip()
     if not ident_str:
         return None
@@ -79,18 +119,50 @@ def find_employee(identifier):
         return Employee.query.filter((Employee.employee_id == ident_str) | (Employee.id == int(ident_str))).first()
     return Employee.query.filter_by(employee_id=ident_str).first()
 
+def check_schema_upgrades():
+    """Safely add any missing columns in existing SQLite tables without wiping data"""
+    try:
+        inspector = inspect(db.engine)
+        if 'leave_requests' in inspector.get_table_names():
+            cols = [c['name'] for c in inspector.get_columns('leave_requests')]
+            if 'approved_by' not in cols:
+                db.session.execute(text("ALTER TABLE leave_requests ADD COLUMN approved_by VARCHAR(128) DEFAULT ''"))
+            if 'rejection_reason' not in cols:
+                db.session.execute(text("ALTER TABLE leave_requests ADD COLUMN rejection_reason TEXT DEFAULT ''"))
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[Schema check note] {e}")
+
 def init_db():
     with app.app_context():
         db.create_all()
+        check_schema_upgrades()
+
+        # Seed initial holidays if none exist
+        if Holiday.query.count() == 0:
+            for h in INITIAL_HOLIDAYS:
+                db.session.add(Holiday(**h))
+            db.session.commit()
+            print("[Init] Seeded official corporate holidays.")
+
+        # Seed employees and balances only if fresh DB
         if Employee.query.count() == 0:
             for item in SEED_EMPLOYEES:
                 emp = Employee(**item)
                 db.session.add(emp)
                 # Seed default leave balances
-                for lt, total in [("Casual Leave", 12.0), ("Sick Leave", 10.0), ("Earned Leave", 15.0), ("Unpaid Leave", 30.0)]:
-                    bal = LeaveBalance(employee_id=emp.employee_id, leave_type=lt, total=total, used=0.0, pending=0.0, available=total)
+                for lt in DEFAULT_LEAVE_TYPES:
+                    bal = LeaveBalance(
+                        employee_id=emp.employee_id,
+                        leave_type=lt["name"],
+                        total=lt["defaultAllocated"],
+                        used=0.0,
+                        pending=0.0,
+                        available=lt["defaultAllocated"]
+                    )
                     db.session.add(bal)
-            
+
             # Seed 2 demo leave requests
             db.session.add(LeaveRequest(
                 employee_id="428",
@@ -100,7 +172,8 @@ def init_db():
                 reason="Family function attendance in hometown",
                 status="APPROVED",
                 days_count=3.0,
-                applied_on="2026-08-01"
+                applied_on="2026-08-01",
+                approved_by="Varun Sharma (Admin)"
             ))
             db.session.add(LeaveRequest(
                 employee_id="411",
@@ -113,10 +186,23 @@ def init_db():
                 applied_on="2026-08-17"
             ))
             db.session.commit()
-            print("Database initialized and seeded with baseline employees and leave records.")
+            print("[Init] Database initialized with baseline employees, leave balances, and sample requests.")
 
 # Initialize database on app startup
 init_db()
+
+
+# ====================================================================
+# HEALTH CHECK
+# ====================================================================
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "database": "connected",
+        "time": get_now().isoformat()
+    })
 
 
 # ====================================================================
@@ -155,7 +241,6 @@ def get_employees():
 def add_employee():
     data = request.get_json() or {}
 
-    # Validation
     emp_id = str(data.get('employee_id', '')).strip()
     full_name = str(data.get('full_name', '')).strip()
     email = str(data.get('email', '')).strip()
@@ -181,7 +266,7 @@ def add_employee():
     if not email:
         errors['email'] = "Email is required."
     elif not re.match(EMAIL_REGEX, email):
-        errors['email'] = "Please enter a valid email address (e.g. name@company.com)."
+        errors['email'] = "Please enter a valid email address."
 
     if not department:
         errors['department'] = "Department is required."
@@ -208,14 +293,14 @@ def add_employee():
     db.session.add(new_emp)
 
     # Automatically initialize standard leave balances
-    for lt, total in [("Casual Leave", 12.0), ("Sick Leave", 10.0), ("Earned Leave", 15.0), ("Unpaid Leave", 30.0)]:
+    for lt in DEFAULT_LEAVE_TYPES:
         db.session.add(LeaveBalance(
             employee_id=emp_id,
-            leave_type=lt,
-            total=total,
+            leave_type=lt["name"],
+            total=lt["defaultAllocated"],
             used=0.0,
             pending=0.0,
-            available=total
+            available=lt["defaultAllocated"]
         ))
 
     db.session.commit()
@@ -228,7 +313,6 @@ def get_employee_details(identifier):
     if not emp:
         return jsonify({"success": False, "message": f"Employee '{identifier}' not found."}), 404
 
-    # Calculate Attendance Summary
     records = AttendanceRecord.query.filter_by(employee_id=emp.employee_id).all()
     total_present = sum(1 for r in records if "PRESENT" in (r.status or "").upper())
     full_days = sum(1 for r in records if (r.status or "").strip().upper() == "FULL DAY PRESENT")
@@ -238,7 +322,6 @@ def get_employee_details(identifier):
     total_work_minutes = sum(r.work_duration_minutes or 0 for r in records)
     total_work_hours = round(total_work_minutes / 60, 1)
 
-    # Calculate Leave Summary
     leaves = LeaveRequest.query.filter_by(employee_id=emp.employee_id).order_by(LeaveRequest.id.desc()).all()
     total_leave = len(leaves)
     approved_leave = sum(1 for l in leaves if l.status == "APPROVED")
@@ -248,7 +331,6 @@ def get_employee_details(identifier):
     balances = LeaveBalance.query.filter_by(employee_id=emp.employee_id).all()
     remaining_balance = sum(b.available for b in balances)
 
-    # Recent Records
     recent_attendance = [
         r.to_dict() for r in AttendanceRecord.query.filter_by(employee_id=emp.employee_id).order_by(AttendanceRecord.date.desc()).limit(8).all()
     ]
@@ -325,7 +407,6 @@ def toggle_employee_status(identifier):
     data = request.get_json() or {}
     new_status = data.get('status')
     if not new_status:
-        # Toggle current status
         new_status = "Inactive" if emp.status == "Active" else "Active"
 
     emp.status = new_status
@@ -350,7 +431,7 @@ def delete_employee(identifier):
 
 
 # ====================================================================
-# ATTENDANCE INGESTION & INTEGRATION ENDPOINTS
+# ATTENDANCE ENDPOINTS
 # ====================================================================
 
 @app.route('/api/attendance', methods=['GET'])
@@ -370,24 +451,16 @@ def get_attendance():
 
 @app.route('/api/attendance/ingest', methods=['POST'])
 def ingest_attendance():
-    """
-    Ingest attendance records with strict validation:
-    If an employee ID in the payload does not exist in SQLite, returns:
-    'Employee <id> does not exist. Please add the employee before importing attendance.'
-    """
     data = request.get_json() or {}
     records = data.get('records', [])
 
     if not records:
         return jsonify({"success": False, "message": "No attendance records provided."}), 400
 
-    # Collect distinct employee IDs
     incoming_emp_ids = set(str(r.get('employeeId') or r.get('employee_id', '')).strip() for r in records)
     incoming_emp_ids.discard('')
 
-    # Verify all employees exist in SQL
     existing_emps = set(e.employee_id for e in Employee.query.filter(Employee.employee_id.in_(incoming_emp_ids)).all())
-
     missing_emps = incoming_emp_ids - existing_emps
     if missing_emps:
         first_missing = sorted(list(missing_emps))[0]
@@ -398,7 +471,6 @@ def ingest_attendance():
             "missing_employees": list(missing_emps)
         }), 400
 
-    # Clear prior imported records for replace mode, or append
     replace_all = data.get('replace', False)
     if replace_all:
         AttendanceRecord.query.delete()
@@ -445,6 +517,49 @@ def ingest_attendance():
 # LEAVE MANAGEMENT ENDPOINTS
 # ====================================================================
 
+@app.route('/api/leave-types', methods=['GET'])
+def get_leave_types():
+    return jsonify({
+        "success": True,
+        "data": DEFAULT_LEAVE_TYPES
+    })
+
+
+@app.route('/api/leave-balances/<employee_id>', methods=['GET'])
+def get_employee_leave_balances(employee_id):
+    emp = find_employee(employee_id)
+    if not emp:
+        return jsonify({"success": False, "message": f"Employee '{employee_id}' not found."}), 404
+
+    balances = LeaveBalance.query.filter_by(employee_id=emp.employee_id).all()
+    # Format as a map { [typeName]: { allocated, used, remaining, pending } }
+    balances_dict = {}
+    for b in balances:
+        balances_dict[b.leave_type] = {
+            "allocated": b.total,
+            "used": b.used,
+            "pending": b.pending,
+            "remaining": b.available
+        }
+
+    # Ensure all default types exist in the map
+    for lt in DEFAULT_LEAVE_TYPES:
+        if lt["name"] not in balances_dict:
+            balances_dict[lt["name"]] = {
+                "allocated": lt["defaultAllocated"],
+                "used": 0.0,
+                "pending": 0.0,
+                "remaining": lt["defaultAllocated"]
+            }
+
+    return jsonify({
+        "success": True,
+        "employeeId": emp.employee_id,
+        "data": balances_dict,
+        "list": [b.to_dict() for b in balances]
+    })
+
+
 @app.route('/api/leaves', methods=['GET'])
 def get_leaves():
     emp_id = request.args.get('employee_id')
@@ -457,7 +572,6 @@ def get_leaves():
         q = q.filter_by(status=status)
 
     leaves = q.order_by(LeaveRequest.id.desc()).all()
-    # Enrich with employee info
     result = []
     for l in leaves:
         d = l.to_dict()
@@ -474,7 +588,7 @@ def apply_leave():
     data = request.get_json() or {}
     emp_id = str(data.get('employeeId') or data.get('employee_id', '')).strip()
 
-    emp = Employee.query.filter_by(employee_id=emp_id).first()
+    emp = find_employee(emp_id)
     if not emp:
         return jsonify({"success": False, "message": f"Employee '{emp_id}' does not exist."}), 400
 
@@ -482,24 +596,37 @@ def apply_leave():
     start_date = data.get('startDate') or data.get('start_date')
     end_date = data.get('endDate') or data.get('end_date')
     reason = data.get('reason', '')
-    days_count = safe_float(data.get('daysCount') or data.get('days_count'), 1.0)
+    days_count = safe_float(data.get('daysCount') or data.get('days') or data.get('days_count'), 1.0)
 
     if not leave_type or not start_date or not end_date or not reason:
         return jsonify({"success": False, "message": "All leave fields are required."}), 400
 
     req = LeaveRequest(
-        employee_id=emp_id,
+        employee_id=emp.employee_id,
         leave_type=leave_type,
         start_date=start_date,
         end_date=end_date,
         reason=reason,
         status="PENDING",
         days_count=days_count,
-        applied_on=get_now().strftime("%Y-%m-%d")
+        applied_on=get_now().strftime("%Y-%m-%d"),
+        approved_by="",
+        rejection_reason=""
     )
     db.session.add(req)
+
+    # Adjust pending leave balance in DB
+    bal = LeaveBalance.query.filter_by(employee_id=emp.employee_id, leave_type=leave_type).first()
+    if bal:
+        bal.pending = (bal.pending or 0.0) + days_count
+
     db.session.commit()
-    return jsonify({"success": True, "message": "Leave request submitted successfully.", "data": req.to_dict()}), 201
+
+    resp_data = req.to_dict()
+    resp_data['employeeName'] = emp.full_name
+    resp_data['department'] = emp.department
+
+    return jsonify({"success": True, "message": "Leave request submitted successfully.", "data": resp_data}), 201
 
 
 @app.route('/api/leaves/<int:leave_id>', methods=['PATCH'])
@@ -513,9 +640,119 @@ def update_leave_status(leave_id):
     if new_status not in ["APPROVED", "REJECTED", "CANCELLED", "PENDING"]:
         return jsonify({"success": False, "message": "Invalid leave status."}), 400
 
+    old_status = req.status
     req.status = new_status
+
+    if new_status == "APPROVED":
+        req.approved_by = data.get('approvedBy') or data.get('approved_by') or "Admin"
+        req.rejection_reason = ""
+    elif new_status == "REJECTED":
+        req.approved_by = data.get('approvedBy') or data.get('approved_by') or "Admin"
+        req.rejection_reason = data.get('rejectionReason') or data.get('reason') or "Operational requirements"
+
+    # Maintain single source of truth for LeaveBalance
+    bal = LeaveBalance.query.filter_by(employee_id=req.employee_id, leave_type=req.leave_type).first()
+    if bal:
+        days = req.days_count or 1.0
+        if old_status == "PENDING" and new_status == "APPROVED":
+            bal.pending = max(0.0, (bal.pending or 0.0) - days)
+            bal.used = (bal.used or 0.0) + days
+            bal.available = max(0.0, (bal.total or 0.0) - bal.used)
+        elif old_status == "PENDING" and new_status in ["REJECTED", "CANCELLED"]:
+            bal.pending = max(0.0, (bal.pending or 0.0) - days)
+        elif old_status == "APPROVED" and new_status in ["REJECTED", "CANCELLED"]:
+            bal.used = max(0.0, (bal.used or 0.0) - days)
+            bal.available = max(0.0, (bal.total or 0.0) - bal.used)
+
     db.session.commit()
-    return jsonify({"success": True, "message": f"Leave status updated to {new_status}.", "data": req.to_dict()})
+
+    emp = Employee.query.filter_by(employee_id=req.employee_id).first()
+    resp_data = req.to_dict()
+    resp_data['employeeName'] = emp.full_name if emp else "Unknown"
+    resp_data['department'] = emp.department if emp else "General"
+
+    return jsonify({"success": True, "message": f"Leave status updated to {new_status}.", "data": resp_data})
+
+
+@app.route('/api/leaves/<int:leave_id>', methods=['DELETE'])
+def delete_or_cancel_leave(leave_id):
+    req = db.session.get(LeaveRequest, leave_id)
+    if not req:
+        return jsonify({"success": False, "message": "Leave request not found."}), 404
+
+    # Release pending balance if still pending
+    if req.status == "PENDING":
+        bal = LeaveBalance.query.filter_by(employee_id=req.employee_id, leave_type=req.leave_type).first()
+        if bal:
+            bal.pending = max(0.0, (bal.pending or 0.0) - (req.days_count or 1.0))
+
+    db.session.delete(req)
+    db.session.commit()
+    return jsonify({"success": True, "message": f"Leave request {leave_id} deleted."})
+
+
+# ====================================================================
+# HOLIDAYS API ENDPOINTS (CENTRALIZED SINGLE SOURCE OF TRUTH)
+# ====================================================================
+
+@app.route('/api/holidays', methods=['GET'])
+def get_holidays():
+    holidays = Holiday.query.order_by(Holiday.date.asc()).all()
+    return jsonify({
+        "success": True,
+        "count": len(holidays),
+        "data": [h.to_dict() for h in holidays]
+    })
+
+
+@app.route('/api/holidays', methods=['POST'])
+def add_holiday():
+    data = request.get_json() or {}
+    name = str(data.get('name', '')).strip()
+    date_str = str(data.get('date', '')).strip()
+    h_type = str(data.get('type', 'National Holiday')).strip()
+
+    if not name or not date_str:
+        return jsonify({"success": False, "message": "Holiday name and date are required."}), 400
+
+    h_id = str(data.get('id') or f"h_{int(get_now().timestamp()*1000)}")
+    existing = db.session.get(Holiday, h_id)
+    if existing:
+        h_id = f"h_{int(get_now().timestamp()*1000)}"
+
+    holiday = Holiday(id=h_id, date=date_str, name=name, type=h_type)
+    db.session.add(holiday)
+    db.session.commit()
+    return jsonify({"success": True, "message": f"Holiday '{name}' created.", "data": holiday.to_dict()}), 201
+
+
+@app.route('/api/holidays/<holiday_id>', methods=['PUT'])
+def update_holiday(holiday_id):
+    holiday = db.session.get(Holiday, holiday_id)
+    if not holiday:
+        return jsonify({"success": False, "message": f"Holiday '{holiday_id}' not found."}), 404
+
+    data = request.get_json() or {}
+    if 'name' in data:
+        holiday.name = str(data['name']).strip()
+    if 'date' in data:
+        holiday.date = str(data['date']).strip()
+    if 'type' in data:
+        holiday.type = str(data['type']).strip()
+
+    db.session.commit()
+    return jsonify({"success": True, "message": "Holiday updated.", "data": holiday.to_dict()})
+
+
+@app.route('/api/holidays/<holiday_id>', methods=['DELETE'])
+def delete_holiday(holiday_id):
+    holiday = db.session.get(Holiday, holiday_id)
+    if not holiday:
+        return jsonify({"success": False, "message": f"Holiday '{holiday_id}' not found."}), 404
+
+    db.session.delete(holiday)
+    db.session.commit()
+    return jsonify({"success": True, "message": f"Holiday '{holiday_id}' deleted."})
 
 
 # ====================================================================
@@ -524,11 +761,9 @@ def update_leave_status(leave_id):
 
 @app.route('/api/dashboard/stats', methods=['GET'])
 def get_dashboard_stats():
-    # Active Staff from SQLite is the single source of truth
     active_staff_count = Employee.query.filter_by(status='Active').count()
     total_staff_count = Employee.query.count()
 
-    # Attendance aggregates
     records = AttendanceRecord.query.all()
     full_day_count = sum(1 for r in records if (r.status or "").strip().upper() == "FULL DAY PRESENT")
     morning_half_count = sum(1 for r in records if "MORNING" in (r.status or "").upper())
@@ -538,7 +773,6 @@ def get_dashboard_stats():
     late_list = [r for r in records if (r.late_minutes or 0) > 0]
     total_late_mins = sum(r.late_minutes or 0 for r in late_list)
 
-    # Leave aggregates
     pending_leaves = LeaveRequest.query.filter_by(status="PENDING").count()
     approved_leaves = LeaveRequest.query.filter_by(status="APPROVED").count()
 
@@ -560,4 +794,7 @@ def get_dashboard_stats():
 
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    host = os.getenv('HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', 5000))
+    print(f"[Server] Attendance OS Pro API listening on http://{host}:{port}")
+    app.run(host=host, port=port, debug=False)

@@ -62,3 +62,11 @@ server/attendance_os.db
 *.bak
 *.tmp
 scratch/
+
+# Database migration backup
+server/data_backup.json
+
+# Environment files
+.env
+.env.local
+server/.env

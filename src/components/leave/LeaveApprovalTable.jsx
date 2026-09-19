@@ -15,10 +15,14 @@ export function LeaveApprovalTable({ onToast }) {
 
     const pendingRequests = requests.filter(r => r.status === "PENDING");
 
-    const handleApprove = (req) => {
-        const approver = currentUser ? `${currentUser.name} (${currentUser.designation || 'Manager'})` : "Admin Supervisor";
-        approveLeave(req.id, approver);
-        if (onToast) onToast(`Approved ${req.leaveType} for ${req.employeeName}`, "success");
+    const handleApprove = async (req) => {
+        try {
+            const approver = currentUser ? `${currentUser.name} (${currentUser.designation || 'Manager'})` : "Admin Supervisor";
+            await approveLeave(req.id, approver);
+            if (onToast) onToast(`Approved ${req.leaveType} for ${req.employeeName}`, "success");
+        } catch (err) {
+            if (onToast) onToast(err.message || "Failed to approve leave request", "danger");
+        }
     };
 
     const openRejectModal = (req) => {
@@ -27,13 +31,17 @@ export function LeaveApprovalTable({ onToast }) {
         setRejectModalOpen(true);
     };
 
-    const confirmReject = (e) => {
+    const confirmReject = async (e) => {
         e.preventDefault();
         if (!selectedReq) return;
-        const rejector = currentUser ? `${currentUser.name}` : "Admin";
-        rejectLeave(selectedReq.id, rejectReason.trim() || "Operational workload requirements", rejector);
-        setRejectModalOpen(false);
-        if (onToast) onToast(`Rejected leave request for ${selectedReq.employeeName}`, "info");
+        try {
+            const rejector = currentUser ? `${currentUser.name}` : "Admin";
+            await rejectLeave(selectedReq.id, rejectReason.trim() || "Operational workload requirements", rejector);
+            setRejectModalOpen(false);
+            if (onToast) onToast(`Rejected leave request for ${selectedReq.employeeName}`, "info");
+        } catch (err) {
+            if (onToast) onToast(err.message || "Failed to reject leave request", "danger");
+        }
     };
 
     return (

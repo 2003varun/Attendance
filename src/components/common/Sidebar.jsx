@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useAttendance } from '../../context/AttendanceContext';
 import { useLeave } from '../../context/LeaveContext';
 import { useAuth } from '../../context/AuthContext';
+import { getApiUrl } from '../../utils/apiConfig';
 
 export function Sidebar() {
     const { rawData, datasetName } = useAttendance();
@@ -12,7 +13,7 @@ export function Sidebar() {
 
     useEffect(() => {
         let isMounted = true;
-        fetch('/api/employees?status=Active')
+        fetch(getApiUrl('/api/employees?status=Active'))
             .then(res => res.json())
             .then(json => {
                 if (isMounted && json.success) {

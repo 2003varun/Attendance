@@ -7,6 +7,7 @@ import { StatusDoughnutChart } from '../components/attendance/StatusDoughnutChar
 import { TopLateChart } from '../components/attendance/TopLateChart';
 import { ArrivalCurveChart } from '../components/attendance/ArrivalCurveChart';
 import { formatDuration, minutesToTime } from '../utils/timeUtils';
+import { getApiUrl } from '../utils/apiConfig';
 
 export function Dashboard() {
     const { rawData, filteredData, rules } = useAttendance();
@@ -15,7 +16,7 @@ export function Dashboard() {
 
     useEffect(() => {
         let isMounted = true;
-        fetch('/api/dashboard/stats')
+        fetch(getApiUrl('/api/dashboard/stats'))
             .then(res => res.json())
             .then(json => {
                 if (isMounted && json.success) {

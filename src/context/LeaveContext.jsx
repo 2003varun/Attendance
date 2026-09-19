@@ -1,48 +1,91 @@
-// Leave & Holiday Management Context
+// Leave & Holiday Management Context - Centralized REST API Synchronized
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { leaveService } from '../services/leaveService';
+import { leaveService, DEFAULT_LEAVE_TYPES } from '../services/leaveService';
 import { holidayService } from '../services/holidayService';
 import { notificationService } from '../services/notificationService';
 
 const LeaveContext = createContext(null);
 
 export function LeaveProvider({ children }) {
-    const [requests, setRequests] = useState(() => leaveService.getAllRequests());
-    const [leaveTypes, setLeaveTypes] = useState(() => leaveService.getLeaveTypes());
-    const [holidays, setHolidays] = useState(() => holidayService.getAll());
+    const [requests, setRequests] = useState(() => leaveService.getAllRequestsSync());
+    const [leaveTypes, setLeaveTypes] = useState(() => leaveService.getLeaveTypesSync());
+    const [holidays, setHolidays] = useState(() => holidayService.getAllSync());
     const [notifications, setNotifications] = useState(() => notificationService.getAll());
+    const [balancesMap, setBalancesMap] = useState({});
 
-    const refreshRequests = useCallback(() => {
-        setRequests(leaveService.getAllRequests());
+    const refreshRequests = useCallback(async () => {
+        try {
+            const list = await leaveService.getAllRequests();
+            setRequests([...list]);
+        } catch (e) {
+            console.warn("Failed to refresh leave requests:", e);
+        }
     }, []);
 
-    const refreshHolidays = useCallback(() => {
-        setHolidays(holidayService.getAll());
+    const refreshHolidays = useCallback(async () => {
+        try {
+            const list = await holidayService.getAll();
+            setHolidays([...list]);
+        } catch (e) {
+            console.warn("Failed to refresh holidays:", e);
+        }
+    }, []);
+
+    const refreshLeaveTypes = useCallback(async () => {
+        try {
+            const list = await leaveService.getLeaveTypes();
+            setLeaveTypes([...list]);
+        } catch (e) {
+            console.warn("Failed to refresh leave types:", e);
+        }
     }, []);
 
     const refreshNotifications = useCallback(() => {
         setNotifications(notificationService.getAll());
     }, []);
 
-    const applyLeave = (requestData) => {
-        const newReq = leaveService.applyLeave(requestData);
-        refreshRequests();
+    // Initial data fetch from shared API on mount
+    useEffect(() => {
+        let isMounted = true;
+        Promise.all([
+            leaveService.getAllRequests(),
+            holidayService.getAll(),
+            leaveService.getLeaveTypes()
+        ]).then(([reqs, hols, types]) => {
+            if (isMounted) {
+                if (reqs) setRequests([...reqs]);
+                if (hols) setHolidays([...hols]);
+                if (types) setLeaveTypes([...types]);
+            }
+        }).catch(err => console.error("Initial LeaveProvider sync error:", err));
+
+        return () => { isMounted = false; };
+    }, []);
+
+    const applyLeave = async (requestData) => {
+        const newReq = await leaveService.applyLeave(requestData);
+        await refreshRequests();
 
         // Trigger notification to Admin/Manager
         notificationService.add({
             title: "New Leave Request",
-            message: `${requestData.employeeName} (${requestData.employeeId}) requested ${requestData.days} day(s) of ${requestData.leaveType}.`,
+            message: `${requestData.employeeName} (${requestData.employeeId}) requested ${requestData.days || requestData.daysCount} day(s) of ${requestData.leaveType}.`,
             type: "info",
             recipientRole: "ADMIN",
             recipientId: "all"
         });
         refreshNotifications();
+
+        if (requestData.employeeId) {
+            fetchBalances(requestData.employeeId);
+        }
+
         return newReq;
     };
 
-    const approveLeave = (requestId, approverName = "Admin") => {
-        const approved = leaveService.approve(requestId, approverName);
-        refreshRequests();
+    const approveLeave = async (requestId, approverName = "Admin") => {
+        const approved = await leaveService.approve(requestId, approverName);
+        await refreshRequests();
 
         notificationService.add({
             title: "Leave Approved",
@@ -52,12 +95,17 @@ export function LeaveProvider({ children }) {
             recipientId: approved.employeeId
         });
         refreshNotifications();
+
+        if (approved.employeeId) {
+            fetchBalances(approved.employeeId);
+        }
+
         return approved;
     };
 
-    const rejectLeave = (requestId, reason, rejectorName = "Admin") => {
-        const rejected = leaveService.reject(requestId, reason, rejectorName);
-        refreshRequests();
+    const rejectLeave = async (requestId, reason, rejectorName = "Admin") => {
+        const rejected = await leaveService.reject(requestId, reason, rejectorName);
+        await refreshRequests();
 
         notificationService.add({
             title: "Leave Rejected",
@@ -67,34 +115,60 @@ export function LeaveProvider({ children }) {
             recipientId: rejected.employeeId
         });
         refreshNotifications();
+
+        if (rejected.employeeId) {
+            fetchBalances(rejected.employeeId);
+        }
+
         return rejected;
     };
 
-    const cancelLeave = (requestId) => {
-        const cancelled = leaveService.cancel(requestId);
-        refreshRequests();
+    const cancelLeave = async (requestId) => {
+        const cancelled = await leaveService.cancel(requestId);
+        await refreshRequests();
+
+        if (cancelled.employeeId) {
+            fetchBalances(cancelled.employeeId);
+        }
+
         return cancelled;
     };
 
-    const getBalances = useCallback((employeeId) => {
-        return leaveService.getBalances(employeeId);
+    const fetchBalances = useCallback(async (employeeId) => {
+        if (!employeeId) return;
+        try {
+            const data = await leaveService.getBalances(employeeId);
+            setBalancesMap(prev => ({ ...prev, [employeeId]: data }));
+            return data;
+        } catch (e) {
+            console.error(`Failed to fetch balances for ${employeeId}:`, e);
+        }
     }, []);
 
-    const addHoliday = (holiday) => {
-        const created = holidayService.add(holiday);
-        refreshHolidays();
+    const getBalances = useCallback((employeeId) => {
+        if (balancesMap[employeeId]) {
+            return balancesMap[employeeId];
+        }
+        // If not in React state map, return synchronous fallback and fetch in background
+        fetchBalances(employeeId);
+        return leaveService.getBalancesSync(employeeId);
+    }, [balancesMap, fetchBalances]);
+
+    const addHoliday = async (holiday) => {
+        const created = await holidayService.add(holiday);
+        await refreshHolidays();
         return created;
     };
 
-    const updateHoliday = (id, updates) => {
-        const updated = holidayService.update(id, updates);
-        refreshHolidays();
+    const updateHoliday = async (id, updates) => {
+        const updated = await holidayService.update(id, updates);
+        await refreshHolidays();
         return updated;
     };
 
-    const deleteHoliday = (id) => {
-        const deleted = holidayService.delete(id);
-        refreshHolidays();
+    const deleteHoliday = async (id) => {
+        const deleted = await holidayService.delete(id);
+        await refreshHolidays();
         return deleted;
     };
 
@@ -123,6 +197,7 @@ export function LeaveProvider({ children }) {
         rejectLeave,
         cancelLeave,
         getBalances,
+        fetchBalances,
         addHoliday,
         updateHoliday,
         deleteHoliday,
@@ -130,7 +205,8 @@ export function LeaveProvider({ children }) {
         markAllNotificationsRead,
         clearAllNotifications,
         refreshRequests,
-        refreshHolidays
+        refreshHolidays,
+        refreshLeaveTypes
     };
 
     return (

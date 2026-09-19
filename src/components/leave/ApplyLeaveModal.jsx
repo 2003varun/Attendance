@@ -70,21 +70,7 @@ export function ApplyLeaveModal({ isOpen, onClose, onSuccess }) {
         }
 
         try {
-            // Also persist to Flask SQLite API
-            fetch('/api/leaves', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    employeeId,
-                    leaveType,
-                    startDate,
-                    endDate,
-                    reason: reason.trim(),
-                    daysCount: calculatedDays
-                })
-            }).catch(e => console.error("Could not sync leave to SQL API", e));
-
-            applyLeave({
+            await applyLeave({
                 employeeId,
                 employeeName: empName,
                 department: empDept,

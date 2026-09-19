@@ -33,22 +33,30 @@ export function Holidays({ onToast }) {
         setModalOpen(true);
     };
 
-    const handleSave = (e) => {
+    const handleSave = async (e) => {
         e.preventDefault();
-        if (editingHoliday) {
-            updateHoliday(editingHoliday.id, form);
-            if (onToast) onToast(`Updated holiday ${form.name}`, "success");
-        } else {
-            addHoliday(form);
-            if (onToast) onToast(`Added holiday ${form.name}`, "success");
+        try {
+            if (editingHoliday) {
+                await updateHoliday(editingHoliday.id, form);
+                if (onToast) onToast(`Updated holiday ${form.name}`, "success");
+            } else {
+                await addHoliday(form);
+                if (onToast) onToast(`Added holiday ${form.name}`, "success");
+            }
+            setModalOpen(false);
+        } catch (err) {
+            if (onToast) onToast(err.message || "Failed to save holiday", "danger");
         }
-        setModalOpen(false);
     };
 
-    const handleDelete = (id, name) => {
+    const handleDelete = async (id, name) => {
         if (window.confirm(`Delete holiday "${name}"?`)) {
-            deleteHoliday(id);
-            if (onToast) onToast("Holiday deleted", "info");
+            try {
+                await deleteHoliday(id);
+                if (onToast) onToast("Holiday deleted", "info");
+            } catch (err) {
+                if (onToast) onToast(err.message || "Failed to delete holiday", "danger");
+            }
         }
     };
 

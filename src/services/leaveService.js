@@ -1,208 +1,204 @@
-// Leave Management Service
+// Centralized Leave Management Service - Synchronized with Flask REST API
+import { getApiUrl } from '../utils/apiConfig';
 
 export const DEFAULT_LEAVE_TYPES = [
-    { id: "CL", name: "Casual Leave", defaultAllocated: 7, description: "Standard personal or casual days off" },
-    { id: "SL", name: "Sick Leave", defaultAllocated: 5, description: "Medical reasons and sick rest" },
-    { id: "EL", name: "Earned Leave", defaultAllocated: 12, description: "Privilege/annual accrued leave" },
-    { id: "UL", name: "Unpaid Leave", defaultAllocated: 0, description: "Leave without pay (unrestricted)" }
+    { id: "CL", name: "Casual Leave", defaultAllocated: 12, description: "Standard personal or casual days off" },
+    { id: "SL", name: "Sick Leave", defaultAllocated: 10, description: "Medical reasons and sick rest" },
+    { id: "EL", name: "Earned Leave", defaultAllocated: 15, description: "Privilege/annual accrued leave" },
+    { id: "UL", name: "Unpaid Leave", defaultAllocated: 30, description: "Leave without pay (unrestricted)" }
 ];
 
-const INITIAL_REQUESTS = [
-    {
-        id: "leave_101",
-        employeeId: "428",
-        employeeName: "Kavita Rao",
-        department: "Human Resources",
-        leaveType: "Casual Leave",
-        startDate: "2026-08-10",
-        endDate: "2026-08-12",
-        days: 3,
-        reason: "Family event and personal matters",
-        status: "APPROVED",
-        appliedDate: "2026-08-01",
-        approvedBy: "Varun Sharma (Admin)",
-        rejectionReason: "",
-        createdAt: "2026-08-01T10:00:00Z"
-    },
-    {
-        id: "leave_102",
-        employeeId: "363",
-        employeeName: "David Miller",
-        department: "Engineering",
-        leaveType: "Sick Leave",
-        startDate: "2026-08-18",
-        endDate: "2026-08-19",
-        days: 2,
-        reason: "Severe fever and flu recovery",
-        status: "APPROVED",
-        appliedDate: "2026-08-17",
-        approvedBy: "Sarah Jenkins (Manager)",
-        rejectionReason: "",
-        createdAt: "2026-08-17T08:30:00Z"
-    },
-    {
-        id: "leave_103",
-        employeeId: "405",
-        employeeName: "Amit Patel",
-        department: "Product",
-        leaveType: "Earned Leave",
-        startDate: "2026-08-28",
-        endDate: "2026-08-31",
-        days: 3, // excluding Sunday Aug 30
-        reason: "Annual vacation trip",
-        status: "PENDING",
-        appliedDate: "2026-08-20",
-        approvedBy: "",
-        rejectionReason: "",
-        createdAt: "2026-08-20T14:15:00Z"
-    },
-    {
-        id: "leave_104",
-        employeeId: "75",
-        employeeName: "Sarah Jenkins",
-        department: "Engineering",
-        leaveType: "Casual Leave",
-        startDate: "2026-09-02",
-        endDate: "2026-09-03",
-        days: 2,
-        reason: "Personal appointment",
-        status: "PENDING",
-        appliedDate: "2026-08-25",
-        approvedBy: "",
-        rejectionReason: "",
-        createdAt: "2026-08-25T11:00:00Z"
-    }
-];
-
-const REQUESTS_STORAGE_KEY = "attendance_os_leave_requests";
-const BALANCES_STORAGE_KEY = "attendance_os_leave_balances";
-const TYPES_STORAGE_KEY = "attendance_os_leave_types";
+let _cachedRequests = [];
+let _cachedLeaveTypes = [...DEFAULT_LEAVE_TYPES];
+let _cachedBalancesByEmp = {};
 
 export const leaveService = {
-    getLeaveTypes() {
-        try {
-            const stored = localStorage.getItem(TYPES_STORAGE_KEY);
-            if (stored) return JSON.parse(stored);
-        } catch (e) {
-            console.error("Failed to load leave types", e);
-        }
-        this.saveLeaveTypes(DEFAULT_LEAVE_TYPES);
-        return DEFAULT_LEAVE_TYPES;
+    // Synchronous helpers for instant renders
+    getAllRequestsSync() {
+        return _cachedRequests;
     },
 
-    saveLeaveTypes(types) {
-        try {
-            localStorage.setItem(TYPES_STORAGE_KEY, JSON.stringify(types));
-        } catch (e) {
-            console.error("Failed to save leave types", e);
-        }
+    getLeaveTypesSync() {
+        return _cachedLeaveTypes.length > 0 ? _cachedLeaveTypes : DEFAULT_LEAVE_TYPES;
     },
 
-    getAllRequests() {
-        try {
-            const stored = localStorage.getItem(REQUESTS_STORAGE_KEY);
-            if (stored) return JSON.parse(stored);
-        } catch (e) {
-            console.error("Failed to load leave requests", e);
+    getBalancesSync(employeeId) {
+        if (_cachedBalancesByEmp[employeeId]) {
+            return _cachedBalancesByEmp[employeeId];
         }
-        this.saveRequests(INITIAL_REQUESTS);
-        return INITIAL_REQUESTS;
-    },
-
-    saveRequests(list) {
-        try {
-            localStorage.setItem(REQUESTS_STORAGE_KEY, JSON.stringify(list));
-        } catch (e) {
-            console.error("Failed to save leave requests", e);
-        }
-    },
-
-    /**
-     * Compute or fetch leave balances for a given employee
-     */
-    getBalances(employeeId) {
-        const types = this.getLeaveTypes();
-        const allRequests = this.getAllRequests();
-        const approvedLeaves = allRequests.filter(r => 
-            String(r.employeeId) === String(employeeId) && r.status === "APPROVED"
-        );
-
-        // Load custom allocated balances if present, otherwise defaults
-        let customBalances = {};
-        try {
-            const stored = localStorage.getItem(`${BALANCES_STORAGE_KEY}_${employeeId}`);
-            if (stored) customBalances = JSON.parse(stored);
-        } catch (e) {}
-
-        const balances = {};
-        types.forEach(t => {
-            const allocated = customBalances[t.name]?.allocated ?? t.defaultAllocated;
-            const used = approvedLeaves
-                .filter(r => r.leaveType === t.name)
-                .reduce((acc, r) => acc + (Number(r.days) || 0), 0);
-            
-            balances[t.name] = {
-                allocated,
-                used,
-                remaining: Math.max(0, allocated - used)
+        // Return default structure if not yet cached
+        const defaults = {};
+        _cachedLeaveTypes.forEach(t => {
+            defaults[t.name] = {
+                allocated: t.defaultAllocated,
+                used: 0,
+                pending: 0,
+                remaining: t.defaultAllocated
             };
         });
-
-        return balances;
+        return defaults;
     },
 
-    applyLeave(requestData) {
-        const requests = this.getAllRequests();
-        const newReq = {
-            id: `leave_${Date.now()}`,
-            status: "PENDING",
-            appliedDate: new Date().toISOString().slice(0, 10),
-            createdAt: new Date().toISOString(),
-            approvedBy: "",
-            rejectionReason: "",
-            ...requestData
+    // Asynchronous API calls (Single Source of Truth)
+    async getLeaveTypes() {
+        try {
+            const res = await fetch(getApiUrl('/api/leave-types'));
+            if (res.ok) {
+                const json = await res.json();
+                if (json.data && json.data.length > 0) {
+                    _cachedLeaveTypes = json.data;
+                    return json.data;
+                }
+            }
+        } catch (e) {
+            console.warn('[leaveService.getLeaveTypes] Using fallback:', e.message);
+        }
+        return _cachedLeaveTypes;
+    },
+
+    async getAllRequests(params = {}) {
+        try {
+            const query = new URLSearchParams();
+            if (params.employee_id) query.append('employee_id', params.employee_id);
+            if (params.status && params.status !== 'ALL') query.append('status', params.status);
+
+            const url = getApiUrl(`/api/leaves${query.toString() ? '?' + query.toString() : ''}`);
+            const res = await fetch(url);
+            if (!res.ok) {
+                throw new Error(`Failed to fetch leaves: ${res.statusText}`);
+            }
+            const json = await res.json();
+            const list = json.data || [];
+            _cachedRequests = list;
+            return list;
+        } catch (error) {
+            console.warn('[leaveService.getAllRequests] Fallback to cache:', error.message);
+            return _cachedRequests;
+        }
+    },
+
+    async getBalances(employeeId) {
+        if (!employeeId) return this.getBalancesSync(employeeId);
+        try {
+            const res = await fetch(getApiUrl(`/api/leave-balances/${employeeId}`));
+            if (res.ok) {
+                const json = await res.json();
+                if (json.data) {
+                    _cachedBalancesByEmp[employeeId] = json.data;
+                    return json.data;
+                }
+            }
+        } catch (e) {
+            console.warn(`[leaveService.getBalances] Error for ${employeeId}:`, e.message);
+        }
+        return this.getBalancesSync(employeeId);
+    },
+
+    async applyLeave(requestData) {
+        const payload = {
+            employeeId: requestData.employeeId,
+            leaveType: requestData.leaveType,
+            startDate: requestData.startDate,
+            endDate: requestData.endDate,
+            reason: requestData.reason,
+            daysCount: Number(requestData.days) || Number(requestData.daysCount) || 1
         };
 
-        requests.unshift(newReq);
-        this.saveRequests(requests);
-        return newReq;
-    },
+        const res = await fetch(getApiUrl('/api/leaves'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-    approve(requestId, approverName = "Admin") {
-        const requests = this.getAllRequests();
-        const idx = requests.findIndex(r => r.id === requestId);
-        if (idx === -1) throw new Error("Leave request not found");
-
-        requests[idx].status = "APPROVED";
-        requests[idx].approvedBy = approverName;
-        requests[idx].rejectionReason = "";
-        this.saveRequests(requests);
-        return requests[idx];
-    },
-
-    reject(requestId, reason, rejectorName = "Admin") {
-        const requests = this.getAllRequests();
-        const idx = requests.findIndex(r => r.id === requestId);
-        if (idx === -1) throw new Error("Leave request not found");
-
-        requests[idx].status = "REJECTED";
-        requests[idx].approvedBy = rejectorName;
-        requests[idx].rejectionReason = reason || "Request rejected by supervisor";
-        this.saveRequests(requests);
-        return requests[idx];
-    },
-
-    cancel(requestId) {
-        const requests = this.getAllRequests();
-        const idx = requests.findIndex(r => r.id === requestId);
-        if (idx === -1) throw new Error("Leave request not found");
-
-        if (requests[idx].status !== "PENDING") {
-            throw new Error("Only pending leave requests can be cancelled");
+        const json = await res.json();
+        if (!res.ok) {
+            throw new Error(json.message || 'Failed to submit leave application');
         }
 
-        requests[idx].status = "CANCELLED";
-        this.saveRequests(requests);
-        return requests[idx];
+        const created = json.data;
+        // Prepend to cached list
+        _cachedRequests = [created, ..._cachedRequests.filter(r => r.id !== created.id)];
+
+        // Refresh employee balances in background
+        if (requestData.employeeId) {
+            this.getBalances(requestData.employeeId).catch(() => {});
+        }
+
+        return created;
+    },
+
+    async approve(requestId, approverName = "Admin") {
+        const res = await fetch(getApiUrl(`/api/leaves/${requestId}`), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: "APPROVED",
+                approvedBy: approverName
+            })
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+            throw new Error(json.message || 'Failed to approve leave request');
+        }
+
+        const updated = json.data;
+        _cachedRequests = _cachedRequests.map(r => r.id === updated.id ? updated : r);
+
+        if (updated.employeeId) {
+            this.getBalances(updated.employeeId).catch(() => {});
+        }
+
+        return updated;
+    },
+
+    async reject(requestId, reason, rejectorName = "Admin") {
+        const res = await fetch(getApiUrl(`/api/leaves/${requestId}`), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: "REJECTED",
+                reason: reason || "Request rejected by supervisor",
+                approvedBy: rejectorName
+            })
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+            throw new Error(json.message || 'Failed to reject leave request');
+        }
+
+        const updated = json.data;
+        _cachedRequests = _cachedRequests.map(r => r.id === updated.id ? updated : r);
+
+        if (updated.employeeId) {
+            this.getBalances(updated.employeeId).catch(() => {});
+        }
+
+        return updated;
+    },
+
+    async cancel(requestId) {
+        const res = await fetch(getApiUrl(`/api/leaves/${requestId}`), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: "CANCELLED"
+            })
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+            throw new Error(json.message || 'Failed to cancel leave request');
+        }
+
+        const updated = json.data;
+        _cachedRequests = _cachedRequests.map(r => r.id === updated.id ? updated : r);
+
+        if (updated.employeeId) {
+            this.getBalances(updated.employeeId).catch(() => {});
+        }
+
+        return updated;
     }
 };

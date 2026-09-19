@@ -1,6 +1,7 @@
-// Holiday Management Service
+// Holiday Management Service - Synchronized with Central Flask API
+import { getApiUrl } from '../utils/apiConfig';
 
-const INITIAL_HOLIDAYS = [
+const INITIAL_FALLBACK_HOLIDAYS = [
     { id: "h1", date: "2026-01-01", name: "New Year's Day", type: "National Holiday" },
     { id: "h2", date: "2026-01-26", name: "Republic Day", type: "National Holiday" },
     { id: "h3", date: "2026-03-04", name: "Holi", type: "Gazetted Holiday" },
@@ -12,59 +13,76 @@ const INITIAL_HOLIDAYS = [
     { id: "h9", date: "2026-12-25", name: "Christmas", type: "Gazetted Holiday" }
 ];
 
-const STORAGE_KEY = "attendance_os_holidays";
+let _cachedHolidays = [...INITIAL_FALLBACK_HOLIDAYS];
 
 export const holidayService = {
-    getAll() {
+    getAllSync() {
+        return _cachedHolidays;
+    },
+
+    async getAll() {
         try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (stored) return JSON.parse(stored);
+            const res = await fetch(getApiUrl('/api/holidays'));
+            if (res.ok) {
+                const json = await res.json();
+                if (json.data) {
+                    _cachedHolidays = json.data;
+                    return json.data;
+                }
+            }
         } catch (e) {
-            console.error("Failed to load holidays from storage", e);
+            console.warn('[holidayService.getAll] Using cached holidays:', e.message);
         }
-        this.save(INITIAL_HOLIDAYS);
-        return INITIAL_HOLIDAYS;
+        return _cachedHolidays;
     },
 
-    save(list) {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-        } catch (e) {
-            console.error("Failed to save holidays to storage", e);
+    async add(holiday) {
+        const res = await fetch(getApiUrl('/api/holidays'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(holiday)
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            throw new Error(json.message || 'Failed to add holiday');
         }
+        const created = json.data;
+        _cachedHolidays = [..._cachedHolidays, created].sort((a, b) => a.date.localeCompare(b.date));
+        return created;
     },
 
-    add(holiday) {
-        const list = this.getAll();
-        const id = holiday.id || `h_${Date.now()}`;
-        const newHoliday = { ...holiday, id };
-        list.push(newHoliday);
-        list.sort((a, b) => a.date.localeCompare(b.date));
-        this.save(list);
-        return newHoliday;
+    async update(id, updates) {
+        const res = await fetch(getApiUrl(`/api/holidays/${id}`), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            throw new Error(json.message || 'Failed to update holiday');
+        }
+        const updated = json.data;
+        _cachedHolidays = _cachedHolidays.map(h => h.id === id ? updated : h).sort((a, b) => a.date.localeCompare(b.date));
+        return updated;
     },
 
-    update(id, updates) {
-        const list = this.getAll();
-        const idx = list.findIndex(h => h.id === id);
-        if (idx === -1) throw new Error("Holiday not found");
-        list[idx] = { ...list[idx], ...updates };
-        list.sort((a, b) => a.date.localeCompare(b.date));
-        this.save(list);
-        return list[idx];
-    },
-
-    delete(id) {
-        const list = this.getAll().filter(h => h.id !== id);
-        this.save(list);
+    async delete(id) {
+        const res = await fetch(getApiUrl(`/api/holidays/${id}`), {
+            method: 'DELETE'
+        });
+        const json = await res.json();
+        if (!res.ok) {
+            throw new Error(json.message || 'Failed to delete holiday');
+        }
+        _cachedHolidays = _cachedHolidays.filter(h => h.id !== id);
         return true;
     },
 
     isHoliday(dateStr) {
-        return this.getAll().some(h => h.date === dateStr);
+        return _cachedHolidays.some(h => h.date === dateStr);
     },
 
     getHolidayForDate(dateStr) {
-        return this.getAll().find(h => h.date === dateStr) || null;
+        return _cachedHolidays.find(h => h.date === dateStr) || null;
     }
 };

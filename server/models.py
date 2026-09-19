@@ -102,6 +102,8 @@ class LeaveRequest(db.Model):
     status = db.Column(db.String(32), default="PENDING")  # PENDING, APPROVED, REJECTED, CANCELLED
     applied_on = db.Column(db.String(32), default=get_today_str)
     days_count = db.Column(db.Float, default=1.0)
+    approved_by = db.Column(db.String(128), default="", nullable=True)
+    rejection_reason = db.Column(db.Text, default="", nullable=True)
 
     def to_dict(self):
         return {
@@ -113,7 +115,11 @@ class LeaveRequest(db.Model):
             "reason": self.reason,
             "status": self.status,
             "appliedOn": self.applied_on,
-            "daysCount": self.days_count
+            "appliedDate": self.applied_on,
+            "daysCount": self.days_count,
+            "days": self.days_count,
+            "approvedBy": self.approved_by or "",
+            "rejectionReason": self.rejection_reason or ""
         }
 
 
@@ -134,7 +140,27 @@ class LeaveBalance(db.Model):
             "employeeId": self.employee_id,
             "leaveType": self.leave_type,
             "total": self.total,
+            "allocated": self.total,
             "used": self.used,
             "pending": self.pending,
-            "available": self.available
+            "available": self.available,
+            "remaining": self.available
+        }
+
+
+class Holiday(db.Model):
+    __tablename__ = 'holidays'
+
+    id = db.Column(db.String(64), primary_key=True)
+    date = db.Column(db.String(32), nullable=False, index=True)
+    name = db.Column(db.String(128), nullable=False)
+    type = db.Column(db.String(64), default="National Holiday")
+    created_at = db.Column(db.DateTime, default=get_utc_now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "date": self.date,
+            "name": self.name,
+            "type": self.type
         }

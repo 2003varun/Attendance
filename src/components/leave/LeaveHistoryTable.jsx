@@ -15,10 +15,14 @@ export function LeaveHistoryTable({ onToast }) {
         return true;
     });
 
-    const handleCancel = (id) => {
+    const handleCancel = async (id) => {
         if (window.confirm("Are you sure you want to cancel this pending leave request?")) {
-            cancelLeave(id);
-            if (onToast) onToast("Leave request cancelled", "info");
+            try {
+                await cancelLeave(id);
+                if (onToast) onToast("Leave request cancelled", "info");
+            } catch (err) {
+                if (onToast) onToast(err.message || "Failed to cancel leave request", "danger");
+            }
         }
     };
 

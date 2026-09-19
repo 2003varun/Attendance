@@ -1,5 +1,6 @@
 // Centralized Employee Service - Communicating with Flask / SQLite API
 // Maintains an active memory cache to support instant synchronous rendering & reactive updates
+import { getApiUrl } from '../utils/apiConfig';
 
 const INITIAL_CACHE = [
     { id: "75", employee_id: "75", name: "Aarav Sharma", full_name: "Aarav Sharma", email: "aarav.sharma@company.com", phone: "+91 98765 43210", department: "Engineering", designation: "Software Engineer", shift: "Morning Shift (09:00 - 18:00)", status: "Active", employment_type: "Full Time", joining_date: "2023-01-15" },
@@ -46,7 +47,7 @@ export const employeeService = {
             if (params.department && params.department !== 'All') queryParams.append('department', params.department);
             if (params.status && params.status !== 'All') queryParams.append('status', params.status);
 
-            const url = `/api/employees${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+            const url = getApiUrl(`/api/employees${queryParams.toString() ? '?' + queryParams.toString() : ''}`);
             const res = await fetch(url);
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
@@ -66,7 +67,7 @@ export const employeeService = {
 
     async getById(id) {
         try {
-            const res = await fetch(`/api/employees/${id}`);
+            const res = await fetch(getApiUrl(`/api/employees/${id}`));
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
                 throw new Error(err.message || `Failed to fetch employee ${id}`);
@@ -80,7 +81,7 @@ export const employeeService = {
     },
 
     async add(employee) {
-        const res = await fetch('/api/employees', {
+        const res = await fetch(getApiUrl('/api/employees'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(employee)
@@ -97,7 +98,7 @@ export const employeeService = {
     },
 
     async update(id, updates) {
-        const res = await fetch(`/api/employees/${id}`, {
+        const res = await fetch(getApiUrl(`/api/employees/${id}`), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updates)
@@ -114,7 +115,7 @@ export const employeeService = {
     },
 
     async toggleStatus(id, newStatus) {
-        const res = await fetch(`/api/employees/${id}/status`, {
+        const res = await fetch(getApiUrl(`/api/employees/${id}/status`), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: newStatus })
@@ -130,7 +131,7 @@ export const employeeService = {
     },
 
     async delete(id) {
-        const res = await fetch(`/api/employees/${id}`, {
+        const res = await fetch(getApiUrl(`/api/employees/${id}`), {
             method: 'DELETE'
         });
         const json = await res.json();
