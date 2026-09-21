@@ -12,7 +12,7 @@ export function ApplyLeaveModal({ isOpen, onClose, onSuccess }) {
 
     const [employees, setEmployees] = useState([]);
     const [employeeId, setEmployeeId] = useState("");
-    const [leaveType, setLeaveType] = useState("Casual Leave");
+    const [leaveType, setLeaveType] = useState("Paid Leave");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [reason, setReason] = useState("");
@@ -61,7 +61,8 @@ export function ApplyLeaveModal({ isOpen, onClose, onSuccess }) {
             endDate,
             reason,
             existingRequests: requests,
-            leaveBalances: balances
+            leaveBalances: balances,
+            holidays
         });
 
         if (!validation.valid) {
@@ -134,15 +135,15 @@ export function ApplyLeaveModal({ isOpen, onClose, onSuccess }) {
                     </div>
 
                     <div className="filter-group">
-                        <label className="filter-label">Leave Type</label>
+                        <label className="filter-label">Leave Policy Type</label>
                         <select 
                             className="select-field"
                             value={leaveType}
                             onChange={(e) => setLeaveType(e.target.value)}
                         >
-                            {leaveTypes.map(lt => (
-                                <option key={lt.id} value={lt.name}>
-                                    {lt.name}
+                            {(leaveTypes && leaveTypes.length > 0 ? leaveTypes : [{ id: 'PL', name: 'Paid Leave' }]).map(lt => (
+                                <option key={lt.id || lt.name} value={lt.name}>
+                                    {lt.name} (+1 Day / Month Carry-Forward)
                                 </option>
                             ))}
                         </select>

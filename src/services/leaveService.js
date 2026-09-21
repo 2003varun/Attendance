@@ -2,10 +2,7 @@
 import { getApiUrl } from '../utils/apiConfig';
 
 export const DEFAULT_LEAVE_TYPES = [
-    { id: "CL", name: "Casual Leave", defaultAllocated: 12, description: "Standard personal or casual days off" },
-    { id: "SL", name: "Sick Leave", defaultAllocated: 10, description: "Medical reasons and sick rest" },
-    { id: "EL", name: "Earned Leave", defaultAllocated: 15, description: "Privilege/annual accrued leave" },
-    { id: "UL", name: "Unpaid Leave", defaultAllocated: 30, description: "Leave without pay (unrestricted)" }
+    { id: "PL", name: "Paid Leave", defaultAllocated: 1.0, description: "1 day monthly accrual with carry-forward" }
 ];
 
 let _cachedRequests = [];

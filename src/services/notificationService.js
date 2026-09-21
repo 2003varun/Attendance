@@ -2,38 +2,7 @@
 
 const STORAGE_KEY = "attendance_os_notifications";
 
-const INITIAL_NOTIFICATIONS = [
-    {
-        id: "n1",
-        title: "Leave Approved",
-        message: "Your Casual Leave for Aug 10 - Aug 12 was approved by Varun Sharma.",
-        type: "success",
-        time: "10 mins ago",
-        read: false,
-        recipientRole: "EMPLOYEE",
-        recipientId: "428"
-    },
-    {
-        id: "n2",
-        title: "Pending Leave Request",
-        message: "Amit Patel (Product) requested 3 days of Earned Leave.",
-        type: "info",
-        time: "1 hour ago",
-        read: false,
-        recipientRole: "MANAGER",
-        recipientId: "all"
-    },
-    {
-        id: "n3",
-        title: "Monthly Roster Ready",
-        message: "August timesheet logs parsed and aggregated successfully.",
-        type: "info",
-        time: "Yesterday",
-        read: true,
-        recipientRole: "ADMIN",
-        recipientId: "all"
-    }
-];
+const INITIAL_NOTIFICATIONS = [];
 
 export const notificationService = {
     getAll() {

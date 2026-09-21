@@ -1,6 +1,7 @@
-# SQLAlchemy Models for Centralized Employee Management
+# SQLAlchemy Models for Centralized Employee Management & RBAC Authentication
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timezone
+from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
@@ -13,17 +14,53 @@ def get_utc_now():
 def get_today_str():
     return get_utc_now().strftime("%Y-%m-%d")
 
+
+class User(db.Model):
+    __tablename__ = 'users'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    username = db.Column(db.String(128), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(128), nullable=True, index=True)
+    password_hash = db.Column(db.String(256), nullable=False)
+    role = db.Column(db.String(32), nullable=False)  # 'EMPLOYEE', 'MANAGER', 'ACCOUNTANT'
+    employee_id = db.Column(db.String(64), db.ForeignKey('employees.employee_id'), nullable=True, index=True)
+    full_name = db.Column(db.String(128), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=get_utc_now)
+    updated_at = db.Column(db.DateTime, default=get_utc_now, onupdate=get_utc_now)
+
+    # Relationship to Employee
+    employee = db.relationship('Employee', backref=db.backref('user', uselist=False))
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(str(password))
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, str(password))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email or "",
+            "role": self.role,
+            "employee_id": self.employee_id,
+            "full_name": self.full_name,
+            "is_active": self.is_active
+        }
+
+
 class Employee(db.Model):
     __tablename__ = 'employees'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     employee_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
     full_name = db.Column(db.String(128), nullable=False)
-    email = db.Column(db.String(128), nullable=False)
-    phone = db.Column(db.String(32), nullable=True)
-    department = db.Column(db.String(64), nullable=False)
-    designation = db.Column(db.String(64), nullable=False)
-    joining_date = db.Column(db.String(32), nullable=True)
+    email = db.Column(db.String(128), nullable=True, default="")
+    phone = db.Column(db.String(32), nullable=True, default="")
+    department = db.Column(db.String(64), nullable=True, default="")
+    designation = db.Column(db.String(64), nullable=True, default="")
+    joining_date = db.Column(db.String(32), nullable=True, default="")
     shift = db.Column(db.String(64), default="Morning General (09:30 - 18:30)")
     employment_type = db.Column(db.String(32), default="Full Time")  # Full Time, Part Time, Contract, Intern
     status = db.Column(db.String(32), default="Active")  # Active, Inactive
@@ -40,10 +77,10 @@ class Employee(db.Model):
             "id": self.id,
             "employee_id": self.employee_id,
             "full_name": self.full_name,
-            "email": self.email,
+            "email": self.email or "",
             "phone": self.phone or "",
-            "department": self.department,
-            "designation": self.designation,
+            "department": self.department or "",
+            "designation": self.designation or "",
             "joining_date": self.joining_date or "",
             "shift": self.shift or "Morning General (09:30 - 18:30)",
             "employment_type": self.employment_type or "Full Time",
@@ -95,7 +132,7 @@ class LeaveRequest(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     employee_id = db.Column(db.String(64), db.ForeignKey('employees.employee_id'), nullable=False, index=True)
-    leave_type = db.Column(db.String(64), nullable=False)
+    leave_type = db.Column(db.String(64), nullable=False, default="Paid Leave")
     start_date = db.Column(db.String(32), nullable=False)
     end_date = db.Column(db.String(32), nullable=False)
     reason = db.Column(db.Text, nullable=False)
@@ -128,23 +165,27 @@ class LeaveBalance(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     employee_id = db.Column(db.String(64), db.ForeignKey('employees.employee_id'), nullable=False, index=True)
-    leave_type = db.Column(db.String(64), nullable=False)
-    total = db.Column(db.Float, default=12.0)
-    used = db.Column(db.Float, default=0.0)
-    pending = db.Column(db.Float, default=0.0)
-    available = db.Column(db.Float, default=12.0)
+    leave_type = db.Column(db.String(64), nullable=False, default="Paid Leave")
+    total = db.Column(db.Float, default=1.0)  # Total accrued to date
+    used = db.Column(db.Float, default=0.0)   # Total approved days used
+    pending = db.Column(db.Float, default=0.0)  # Total days in pending requests
+    available = db.Column(db.Float, default=1.0) # Accrued - used
+    last_accrual_month = db.Column(db.String(7), nullable=True)  # YYYY-MM of last monthly accrual increment
 
     def to_dict(self):
+        facing_avail = max(0.0, float(self.available or 0.0))
         return {
             "id": self.id,
             "employeeId": self.employee_id,
             "leaveType": self.leave_type,
             "total": self.total,
             "allocated": self.total,
+            "accrued": self.total,
             "used": self.used,
             "pending": self.pending,
-            "available": self.available,
-            "remaining": self.available
+            "available": facing_avail,
+            "remaining": facing_avail,
+            "lastAccrualMonth": self.last_accrual_month or ""
         }
 
 

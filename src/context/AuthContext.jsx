@@ -1,62 +1,101 @@
-// Authentication & Role Context
+// Authentication & RBAC Context with Token Management
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { employeeService } from '../services/employeeService';
+import { getApiUrl, setAuthToken, clearAuthToken, getAuthToken } from '../utils/apiConfig';
 
 export const ROLES = {
-    ADMIN: "ADMIN",
     MANAGER: "MANAGER",
+    ACCOUNTANT: "ACCOUNTANT",
     EMPLOYEE: "EMPLOYEE"
 };
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-    const [role, setRole] = useState(() => localStorage.getItem("attendance_user_role") || ROLES.ADMIN);
-    const [currentUser, setCurrentUser] = useState(null);
+    const [token, setToken] = useState(() => getAuthToken());
+    const [user, setUser] = useState(() => {
+        try {
+            const saved = localStorage.getItem("auth_user");
+            return saved ? JSON.parse(saved) : null;
+        } catch {
+            return null;
+        }
+    });
+    const [loading, setLoading] = useState(false);
 
+    const role = user?.role || null;
+
+    // Verify token & sync user info on initial load
     useEffect(() => {
-        localStorage.setItem("attendance_user_role", role);
-        const syncEmps = employeeService.getAllSync();
-        const pickUser = (emps) => {
-            if (!emps || !emps.length) return null;
-            if (role === ROLES.ADMIN) {
-                return emps.find(e => e.id === "378" || e.employee_id === "378") || emps[0];
-            } else if (role === ROLES.MANAGER) {
-                return emps.find(e => e.id === "75" || e.employee_id === "75") || emps[0];
-            } else {
-                return emps.find(e => e.id === "428" || e.employee_id === "428") || emps[0];
+        if (token && !user) {
+            fetch(getApiUrl('/api/auth/me'))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.user) {
+                        setUser(data.user);
+                        localStorage.setItem("auth_user", JSON.stringify(data.user));
+                    } else {
+                        logout();
+                    }
+                })
+                .catch(() => {
+                    // If network fails, retain local cache or logout
+                });
+        }
+    }, [token]);
+
+    const login = async (username, password) => {
+        setLoading(true);
+        try {
+            const res = await fetch(getApiUrl('/api/auth/login'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.message || 'Login failed. Please check your credentials.');
             }
-        };
 
-        setCurrentUser(pickUser(syncEmps));
-
-        employeeService.getAll().then(emps => {
-            setCurrentUser(pickUser(emps));
-        }).catch(() => {});
-    }, [role]);
-
-    const changeRole = (newRole) => {
-        if (ROLES[newRole]) {
-            setRole(newRole);
+            setAuthToken(data.token);
+            localStorage.setItem("auth_user", JSON.stringify(data.user));
+            setToken(data.token);
+            setUser(data.user);
+            return data.user;
+        } finally {
+            setLoading(false);
         }
     };
 
-    const changeCurrentUser = (employeeId) => {
-        const emp = employeeService.getByIdSync(employeeId);
-        if (emp) setCurrentUser(emp);
-        employeeService.getById(employeeId).then(user => {
-            if (user) setCurrentUser(user);
-        }).catch(() => {});
+    const logout = () => {
+        clearAuthToken();
+        setToken(null);
+        setUser(null);
     };
 
+    // Synthesize currentUser for existing component compatibility
+    const currentUser = user ? {
+        id: user.employeeId || user.username,
+        employee_id: user.employeeId || user.username,
+        employeeId: user.employeeId || user.username,
+        name: user.fullName || user.username,
+        full_name: user.fullName || user.username,
+        email: user.email || '',
+        role: user.role
+    } : null;
+
     const value = {
+        token,
+        user,
         role,
-        changeRole,
         currentUser,
-        changeCurrentUser,
-        isAdmin: role === ROLES.ADMIN,
+        loading,
+        isAuthenticated: Boolean(token && user),
+        login,
+        logout,
+        isEmployee: role === ROLES.EMPLOYEE,
         isManager: role === ROLES.MANAGER,
-        isEmployee: role === ROLES.EMPLOYEE
+        isAccountant: role === ROLES.ACCOUNTANT,
+        isAdmin: role === ROLES.MANAGER // Backwards compatibility for existing Admin references
     };
 
     return (

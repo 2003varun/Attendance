@@ -161,19 +161,8 @@ export function EmployeeManagement({ onToast }) {
         if (!formData.full_name.trim()) {
             errors.full_name = "Full Name is required.";
         }
-        if (!formData.email.trim()) {
-            errors.email = "Email is required.";
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+        if (formData.email && formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
             errors.email = "Please enter a valid email format (e.g. name@company.com).";
-        }
-        if (!formData.department) {
-            errors.department = "Department is required.";
-        }
-        if (!formData.designation.trim()) {
-            errors.designation = "Designation is required.";
-        }
-        if (!formData.joining_date) {
-            errors.joining_date = "Joining Date is required.";
         }
         setFormErrors(errors);
         return Object.keys(errors).length === 0;
@@ -500,8 +489,7 @@ export function EmployeeManagement({ onToast }) {
                                         <input 
                                             type="text"
                                             className="input-field"
-                                            placeholder="e.g. EMP101 or 429"
-                                            disabled={!!editingEmp}
+                                            placeholder="e.g. EMP101, TEMP-001 or 429"
                                             value={formData.employee_id}
                                             onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
                                             style={{ borderColor: formErrors.employee_id ? 'var(--danger)' : undefined }}
@@ -509,6 +497,11 @@ export function EmployeeManagement({ onToast }) {
                                         {formErrors.employee_id && (
                                             <span style={{ fontSize: '11px', color: 'var(--danger)', marginTop: '2px' }}>
                                                 {formErrors.employee_id}
+                                            </span>
+                                        )}
+                                        {editingEmp && (
+                                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', display: 'block' }}>
+                                                Note: Changing Employee ID will safely update all linked attendance and leave records.
                                             </span>
                                         )}
                                     </div>
@@ -537,9 +530,7 @@ export function EmployeeManagement({ onToast }) {
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                                     {/* Email */}
                                     <div className="filter-group">
-                                        <label className="filter-label">
-                                            Email Address <span style={{ color: 'var(--danger)' }}>*</span>
-                                        </label>
+                                        <label className="filter-label">Email Address (Optional)</label>
                                         <input 
                                             type="email"
                                             className="input-field"
@@ -557,7 +548,7 @@ export function EmployeeManagement({ onToast }) {
 
                                     {/* Phone Number */}
                                     <div className="filter-group">
-                                        <label className="filter-label">Phone Number</label>
+                                        <label className="filter-label">Phone Number (Optional)</label>
                                         <input 
                                             type="text"
                                             className="input-field"
@@ -571,14 +562,13 @@ export function EmployeeManagement({ onToast }) {
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                                     {/* Department */}
                                     <div className="filter-group">
-                                        <label className="filter-label">
-                                            Department <span style={{ color: 'var(--danger)' }}>*</span>
-                                        </label>
+                                        <label className="filter-label">Department (Optional)</label>
                                         <select 
                                             className="select-field"
                                             value={formData.department}
                                             onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                                         >
+                                            <option value="">(Not Specified)</option>
                                             {DEPARTMENTS.filter(d => d !== 'All').map(d => (
                                                 <option key={d} value={d}>{d}</option>
                                             ))}
@@ -587,9 +577,7 @@ export function EmployeeManagement({ onToast }) {
 
                                     {/* Designation */}
                                     <div className="filter-group">
-                                        <label className="filter-label">
-                                            Designation <span style={{ color: 'var(--danger)' }}>*</span>
-                                        </label>
+                                        <label className="filter-label">Designation (Optional)</label>
                                         <input 
                                             type="text"
                                             className="input-field"
@@ -609,9 +597,7 @@ export function EmployeeManagement({ onToast }) {
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                                     {/* Joining Date */}
                                     <div className="filter-group">
-                                        <label className="filter-label">
-                                            Joining Date <span style={{ color: 'var(--danger)' }}>*</span>
-                                        </label>
+                                        <label className="filter-label">Joining Date (Optional)</label>
                                         <input 
                                             type="date"
                                             className="input-field"

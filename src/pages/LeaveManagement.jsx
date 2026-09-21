@@ -13,7 +13,7 @@ export function LeaveManagement({ onToast }) {
     const { isEmployee, isAdmin, isManager, currentUser } = useAuth();
 
     const [applyModalOpen, setApplyModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState(isEmployee ? "history" : "approvals");
+    const [activeTab, setActiveTab] = useState(isManager ? "approvals" : "history");
 
     const pendingCount = requests.filter(r => r.status === "PENDING").length;
     const approvedCount = requests.filter(r => r.status === "APPROVED").length;
@@ -27,8 +27,8 @@ export function LeaveManagement({ onToast }) {
         <section className="page-view active">
             <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div className="section-heading-left">
-                    <h2>🏖️ Enterprise Leave Management</h2>
-                    <p>Apply for leaves, track multi-tier balances, manage approvals & view attendance cross-integration</p>
+                    <h2>🏖️ Paid Leave Management</h2>
+                    <p>Apply for leaves, track monthly accruals (+1/mo), manage carry-forward balances & approvals</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => setApplyModalOpen(true)}>
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
@@ -41,9 +41,9 @@ export function LeaveManagement({ onToast }) {
             {/* Leave Metrics KPI Row */}
             <div className="kpi-grid">
                 <KpiCard
-                    title="Leave Allocated"
-                    value="24"
-                    footer="Standard annual entitlement"
+                    title="Monthly Entitlement"
+                    value="1 day"
+                    footer="1 day per employee / month (Carry Forward)"
                     colorClass="kpi-indigo"
                     icon={
                         <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
@@ -93,10 +93,10 @@ export function LeaveManagement({ onToast }) {
             <div style={{ marginBottom: "16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                     <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
-                        🎯 Leave Balances {isEmployee ? `(My Balance — ${currentUser?.name})` : `(Sample Employee Balance)`}
+                        🎯 Paid Leave Balance {isEmployee ? `(My Balance — ${currentUser?.name})` : `(Staff Balance)`}
                     </h3>
                     <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                        Auto-deducts upon request approval
+                        Policy: 1 day per month entitlement • Unused leave carries forward
                     </span>
                 </div>
                 <LeaveBalanceWidget employeeId={currentUser?.id} />
@@ -104,7 +104,7 @@ export function LeaveManagement({ onToast }) {
 
             {/* Tabs for Views */}
             <div className="tabs-container">
-                {(!isEmployee) && (
+                {isManager && (
                     <button 
                         className={`tab-btn ${activeTab === 'approvals' ? 'active' : ''}`}
                         onClick={() => setActiveTab('approvals')}
@@ -122,12 +122,12 @@ export function LeaveManagement({ onToast }) {
                     className={`tab-btn ${activeTab === 'types' ? 'active' : ''}`}
                     onClick={() => setActiveTab('types')}
                 >
-                    Configured Leave Types
+                    Leave Policy
                 </button>
             </div>
 
             {/* Tab Views */}
-            {activeTab === 'approvals' && (!isEmployee) && (
+            {activeTab === 'approvals' && isManager && (
                 <LeaveApprovalTable onToast={onToast} />
             )}
 

@@ -48,7 +48,8 @@ export function validateLeaveRequest({
     endDate,
     reason,
     existingRequests = [],
-    leaveBalances = {}
+    leaveBalances = {},
+    holidays = []
 }) {
     if (!employeeId) return { valid: false, error: "Please select an employee." };
     if (!leaveType) return { valid: false, error: "Please select a valid leave type." };
@@ -76,23 +77,13 @@ export function validateLeaveRequest({
         return { valid: false, error: "You already have a leave request for this date range." };
     }
 
-    // Balance check
-    const balance = leaveBalances[leaveType];
-    if (balance !== undefined && balance !== null) {
-        // If it's a balance tracked type (e.g. not Unpaid Leave)
-        if (typeof balance.remaining === 'number') {
-            const requestedDays = calculateLeaveDays(startDate, endDate);
-            if (requestedDays <= 0) {
-                return { valid: false, error: "Selected dates only contain holidays or weekly off days." };
-            }
-            if (requestedDays > balance.remaining) {
-                return {
-                    valid: false,
-                    error: `Insufficient leave balance. You requested ${requestedDays} day(s), but only have ${balance.remaining} day(s) remaining for ${leaveType}.`
-                };
-            }
-        }
+    // Calculate requested working days
+    const requestedDays = calculateLeaveDays(startDate, endDate, holidays, true);
+    if (requestedDays <= 0) {
+        return { valid: false, error: "Selected dates only contain holidays or weekly off days." };
     }
+    // Per company policy: Employees may submit requests regardless of current balance;
+    // Manager decides whether to approve or reject.
 
     return { valid: true };
 }

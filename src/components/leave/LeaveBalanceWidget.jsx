@@ -1,4 +1,4 @@
-// Leave Balance Cards Widget Component
+// Paid Leave Balance Card Component with Monthly Accrual & Carry-Forward Tracking
 import React from 'react';
 import { useLeave } from '../../context/LeaveContext';
 import { useAuth } from '../../context/AuthContext';
@@ -7,56 +7,82 @@ export function LeaveBalanceWidget({ employeeId }) {
     const { getBalances } = useLeave();
     const { currentUser } = useAuth();
 
-    const empId = employeeId || currentUser?.id || "378";
-    const balances = getBalances(empId);
+    const empId = employeeId || currentUser?.employeeId || currentUser?.id || "TEMP-001";
+    const balances = getBalances(empId) || {};
 
-    const typeConfig = {
-        "Casual Leave": { code: "CL", class: "type-cl" },
-        "Sick Leave": { code: "SL", class: "type-sl" },
-        "Earned Leave": { code: "EL", class: "type-el" },
-        "Unpaid Leave": { code: "UL", class: "type-ul" }
+    const paidLeaveBal = balances["Paid Leave"] || balances["Monthly Leave"] || {
+        allocated: 1.0,
+        total: 1.0,
+        accrued: 1.0,
+        used: 0.0,
+        pending: 0.0,
+        available: 1.0,
+        remaining: 1.0
     };
 
+    const accrued = paidLeaveBal.accrued ?? paidLeaveBal.total ?? paidLeaveBal.allocated ?? 1.0;
+    const used = paidLeaveBal.used ?? 0.0;
+    const pending = paidLeaveBal.pending ?? 0.0;
+    const available = Math.max(0, paidLeaveBal.available ?? paidLeaveBal.remaining ?? 0);
+
     return (
-        <div className="leave-balance-grid">
-            {Object.entries(balances).map(([typeName, bal]) => {
-                const conf = typeConfig[typeName] || { code: "LV", class: "type-cl" };
-                const isUnpaid = typeName === "Unpaid Leave";
-
-                return (
-                    <div key={typeName} className={`leave-card ${conf.class}`}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-secondary)", textTransform: "uppercase" }}>
-                                {typeName}
-                            </span>
-                            <span className="badge badge-off" style={{ fontWeight: 800 }}>{conf.code}</span>
-                        </div>
-
-                        <div style={{ marginTop: "12px", display: "flex", alignItems: "baseline", gap: "6px" }}>
-                            <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>
-                                {isUnpaid ? bal.used : bal.remaining}
-                            </span>
-                            <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: 600 }}>
-                                {isUnpaid ? "days taken" : "days left"}
-                            </span>
-                        </div>
-
-                        {!isUnpaid && (
-                            <div className="leave-stat-row">
-                                <span style={{ color: "var(--text-muted)" }}>
-                                    Allocated: <strong style={{ color: "var(--text-primary)" }}>{bal.allocated}</strong>
-                                </span>
-                                <span style={{ color: "var(--text-muted)" }}>
-                                    Used: <strong style={{ color: "var(--danger)" }}>{bal.used}</strong>
-                                </span>
-                                <span style={{ color: "var(--text-muted)" }}>
-                                    Remaining: <strong style={{ color: "var(--success)" }}>{bal.remaining}</strong>
-                                </span>
-                            </div>
-                        )}
+        <div className="leave-balance-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+            <div className="leave-card type-cl" style={{ borderLeft: '4px solid var(--primary, #3b82f6)' }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>
+                            Paid Leave
+                        </span>
+                        <span className="badge badge-approved" style={{ fontSize: "11px", fontWeight: 700 }}>
+                            Policy: +1 Day / Month (Carry-Forward)
+                        </span>
                     </div>
-                );
-            })}
+                    <span className="badge badge-off" style={{ fontWeight: 800 }}>PL</span>
+                </div>
+
+                <div style={{ marginTop: "14px", display: "flex", alignItems: "baseline", gap: "8px" }}>
+                    <span style={{ fontSize: "36px", fontWeight: 800, color: "var(--primary, #3b82f6)", fontFamily: "var(--font-mono)" }}>
+                        {available}
+                    </span>
+                    <span style={{ fontSize: "13px", color: "var(--text-muted)", fontWeight: 600 }}>
+                        day(s) available
+                    </span>
+                </div>
+
+                <div className="leave-stat-row" style={{
+                    marginTop: "16px",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: "8px",
+                    borderTop: "1px solid var(--border-light)",
+                    paddingTop: "12px"
+                }}>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "capitalize" }}>Accrued</span>
+                        <strong style={{ fontSize: "14px", color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>
+                            {accrued} d
+                        </strong>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "capitalize" }}>Used</span>
+                        <strong style={{ fontSize: "14px", color: (used > 0 ? "var(--danger)" : "var(--text-secondary)"), fontFamily: "var(--font-mono)" }}>
+                            {used} d
+                        </strong>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "capitalize" }}>Pending</span>
+                        <strong style={{ fontSize: "14px", color: (pending > 0 ? "var(--warning)" : "var(--text-secondary)"), fontFamily: "var(--font-mono)" }}>
+                            {pending} d
+                        </strong>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "capitalize" }}>Available</span>
+                        <strong style={{ fontSize: "14px", color: (available > 0 ? "var(--success)" : "var(--danger)"), fontFamily: "var(--font-mono)" }}>
+                            {available} d
+                        </strong>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

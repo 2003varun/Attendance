@@ -8,7 +8,7 @@ import { exportToCSV } from '../../utils/exportUtils';
 
 export function Header({ title, subtitle, onToast }) {
     const navigate = useNavigate();
-    const { role, changeRole } = useAuth();
+    const { role, user, logout, isManager } = useAuth();
     const { filteredData, clearAttendance } = useAttendance();
     const { notifications, markNotificationRead, markAllNotificationsRead } = useLeave();
 
@@ -82,31 +82,69 @@ export function Header({ title, subtitle, onToast }) {
             <div className="header-right">
                 {/* First Row: Top Controls */}
                 <div className="top-controls">
-                    {/* Role Selector Dropdown */}
-                    <div className="role-selector-container" title="Active User Role">
-                        <span className="role-label">ROLE:</span>
-                        <div className="role-select-wrapper">
-                            <select 
-                                id="roleSelector"
-                                className="role-dropdown"
-                                value={role} 
-                                onChange={(e) => changeRole(e.target.value)}
-                            >
-                                <option value={ROLES.ADMIN}>ADMIN (All Access)</option>
-                                <option value={ROLES.MANAGER}>MANAGER (Team Lead)</option>
-                                <option value={ROLES.EMPLOYEE}>EMPLOYEE (Self Service)</option>
-                            </select>
-                            <svg className="select-chevron" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
+                    {/* User Identity Pill & Logout */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid var(--border-light, rgba(255, 255, 255, 0.1))',
+                        borderRadius: '10px',
+                        padding: '4px 10px',
+                    }} title={`Logged in as ${user?.username || ''}`}>
+                        <div style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '50%',
+                            background: role === 'MANAGER' ? 'linear-gradient(135deg, #3b82f6, #6366f1)' : role === 'ACCOUNTANT' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #f59e0b, #d97706)',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '12px',
+                            fontWeight: 800
+                        }}>
+                            {(user?.fullName || user?.username || 'U').charAt(0).toUpperCase()}
                         </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                            <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {user?.fullName || user?.username || 'User'}
+                            </span>
+                            <span style={{
+                                fontSize: '10px',
+                                fontWeight: 800,
+                                color: role === 'MANAGER' ? '#60a5fa' : role === 'ACCOUNTANT' ? '#34d399' : '#fbbf24',
+                                textTransform: 'uppercase'
+                            }}>
+                                {role}
+                            </span>
+                        </div>
+                        <button
+                            id="headerLogoutBtn"
+                            onClick={logout}
+                            title="Sign Out"
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--text-muted, #94a3b8)',
+                                cursor: 'pointer',
+                                padding: '4px',
+                                marginLeft: '4px',
+                                display: 'flex',
+                                alignItems: 'center'
+                            }}
+                        >
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                            </svg>
+                        </button>
                     </div>
 
                     {/* Notification Bell (Circular icon button with badge) */}
                     <div className="notification-menu-wrapper" ref={notifRef}>
-                        <button 
+                        <button
                             id="notificationBtn"
-                            className="icon-circle-btn" 
+                            className="icon-circle-btn"
                             onClick={() => setNotifOpen(!notifOpen)}
                             title="Notifications"
                             aria-label="Notifications"
@@ -127,7 +165,7 @@ export function Header({ title, subtitle, onToast }) {
                                 <div className="notif-header">
                                     <span>Notifications ({unreadCount} unread)</span>
                                     {unreadCount > 0 && (
-                                        <button 
+                                        <button
                                             className="notif-mark-all"
                                             onClick={markAllNotificationsRead}
                                         >
@@ -142,8 +180,8 @@ export function Header({ title, subtitle, onToast }) {
                                         </div>
                                     ) : (
                                         notifications.map(n => (
-                                            <div 
-                                                key={n.id} 
+                                            <div
+                                                key={n.id}
                                                 className={`notif-item ${!n.read ? 'unread' : ''}`}
                                                 onClick={() => markNotificationRead(n.id)}
                                             >
@@ -159,10 +197,10 @@ export function Header({ title, subtitle, onToast }) {
                     </div>
 
                     {/* Dark/Light Mode Theme Toggle */}
-                    <button 
+                    <button
                         id="themeToggleBtn"
-                        className="icon-circle-btn" 
-                        onClick={toggleTheme} 
+                        className="icon-circle-btn"
+                        onClick={toggleTheme}
                         title="Toggle Dark/Light Mode"
                         aria-label="Toggle Theme"
                     >
@@ -177,25 +215,27 @@ export function Header({ title, subtitle, onToast }) {
                         )}
                     </button>
 
-                    {/* Quick Upload Button */}
-                    <button 
-                        id="headerUploadBtn"
-                        className="btn btn-default btn-upload" 
-                        onClick={() => navigate("/upload")}
-                    >
-                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                        </svg>
-                        <span>Upload Data</span>
-                    </button>
+                    {/* Quick Upload Button (Manager only) */}
+                    {isManager && (
+                        <button
+                            id="headerUploadBtn"
+                            className="btn btn-default btn-upload"
+                            onClick={() => navigate("/upload")}
+                        >
+                            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                            </svg>
+                            <span>Upload Data</span>
+                        </button>
+                    )}
                 </div>
 
                 {/* Second Row: Action Controls Neatly Aligned Underneath */}
                 <div className="action-controls">
                     {/* Primary Action Button */}
-                    <button 
+                    <button
                         id="headerExportCsvBtn"
-                        className="btn btn-primary" 
+                        className="btn btn-primary"
                         onClick={handleExportCSV}
                     >
                         <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
@@ -204,18 +244,20 @@ export function Header({ title, subtitle, onToast }) {
                         <span>Export CSV</span>
                     </button>
 
-                    {/* Secondary Danger Action */}
-                    <button 
-                        id="headerClearBtn"
-                        className="btn btn-danger-subtle" 
-                        onClick={handleClearWorkspace} 
-                        title="Reset workspace"
-                    >
-                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                        <span>Clear</span>
-                    </button>
+                    {/* Secondary Danger Action (Manager only) */}
+                    {isManager && (
+                        <button
+                            id="headerClearBtn"
+                            className="btn btn-danger-subtle"
+                            onClick={handleClearWorkspace}
+                            title="Reset workspace"
+                        >
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                            <span>Clear</span>
+                        </button>
+                    )}
                 </div>
             </div>
         </header>

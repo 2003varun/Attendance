@@ -1,8 +1,13 @@
-# Flask Backend Application for Attendance OS Pro
+# Flask Backend Application for Attendance OS Pro with RBAC & Paid Leave Policy
 import os
 import sys
 import re
 import json
+import time
+import hmac
+import hashlib
+import base64
+from functools import wraps
 from datetime import datetime, timezone
 
 # Ensure the server directory is present in sys.path so 'models' is resolved everywhere
@@ -15,9 +20,9 @@ from flask_cors import CORS
 from sqlalchemy import inspect, text
 
 try:
-    from models import db, Employee, AttendanceRecord, LeaveRequest, LeaveBalance, Holiday
+    from models import db, User, Employee, AttendanceRecord, LeaveRequest, LeaveBalance, Holiday
 except ImportError:
-    from server.models import db, Employee, AttendanceRecord, LeaveRequest, LeaveBalance, Holiday
+    from server.models import db, User, Employee, AttendanceRecord, LeaveRequest, LeaveBalance, Holiday
 
 app = Flask(__name__)
 
@@ -33,7 +38,6 @@ CORS(app, resources={r"/api/*": {"origins": cors_origins}}, supports_credentials
 # Database Configuration (Single Source of Truth)
 DATABASE_URL = os.getenv('DATABASE_URL')
 if DATABASE_URL:
-    # Normalize postgres:// to postgresql:// for SQLAlchemy 1.4+ / 2.0+
     if DATABASE_URL.startswith('postgres://'):
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
@@ -53,21 +57,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 
 EMAIL_REGEX = r'^[\w\.-]+@[\w\.-]+\.\w+$'
-
-# Baseline Employee seed list
-SEED_EMPLOYEES = [
-    { "employee_id": "75", "full_name": "Sarah Jenkins", "email": "sarah.j@company.com", "phone": "+1 (555) 234-5678", "department": "Engineering", "designation": "Staff Systems Engineer", "joining_date": "2023-03-15", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "363", "full_name": "David Miller", "email": "david.m@company.com", "phone": "+1 (555) 345-6789", "department": "Engineering", "designation": "Frontend Developer", "joining_date": "2023-06-10", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "378", "full_name": "Varun Sharma", "email": "varun.s@company.com", "phone": "+1 (555) 456-7890", "department": "Management", "designation": "Engineering Director", "joining_date": "2022-01-01", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "396", "full_name": "Elena Rostova", "email": "elena.r@company.com", "phone": "+1 (555) 567-8901", "department": "Operations", "designation": "Operations Lead", "joining_date": "2023-08-01", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "397", "full_name": "Rajesh Kumar", "email": "rajesh.k@company.com", "phone": "+1 (555) 678-9012", "department": "DevOps", "designation": "Cloud Architect", "joining_date": "2023-08-15", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "405", "full_name": "Amit Patel", "email": "amit.p@company.com", "phone": "+1 (555) 789-0123", "department": "Product", "designation": "Product Manager", "joining_date": "2023-09-01", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "411", "full_name": "Priya Nair", "email": "priya.n@company.com", "phone": "+1 (555) 890-1234", "department": "Design", "designation": "Lead UI/UX Designer", "joining_date": "2023-10-12", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "418", "full_name": "Michael Chang", "email": "michael.c@company.com", "phone": "+1 (555) 901-2345", "department": "Engineering", "designation": "Backend Engineer", "joining_date": "2023-11-01", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "419", "full_name": "Jessica Watson", "email": "jessica.w@company.com", "phone": "+1 (555) 012-3456", "department": "QA", "designation": "Quality Analyst", "joining_date": "2023-11-15", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "424", "full_name": "Rohan Gupta", "email": "rohan.g@company.com", "phone": "+1 (555) 123-4567", "department": "Engineering", "designation": "Mobile App Engineer", "joining_date": "2024-01-10", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" },
-    { "employee_id": "428", "full_name": "Kavita Rao", "email": "kavita.r@company.com", "phone": "+1 (555) 234-5670", "department": "Human Resources", "designation": "HR Specialist", "joining_date": "2024-02-01", "shift": "Morning General (09:30 - 18:30)", "employment_type": "Full Time", "status": "Active" }
-]
+SECRET_KEY = os.getenv('SECRET_KEY', 'attendance-os-pro-super-secret-key-2026').encode('utf-8')
 
 INITIAL_HOLIDAYS = [
     { "id": "h1", "date": "2026-01-01", "name": "New Year's Day", "type": "National Holiday" },
@@ -82,11 +72,13 @@ INITIAL_HOLIDAYS = [
 ]
 
 DEFAULT_LEAVE_TYPES = [
-    { "id": "CL", "name": "Casual Leave", "defaultAllocated": 12.0, "description": "Standard personal or casual days off" },
-    { "id": "SL", "name": "Sick Leave", "defaultAllocated": 10.0, "description": "Medical reasons and sick rest" },
-    { "id": "EL", "name": "Earned Leave", "defaultAllocated": 15.0, "description": "Privilege/annual accrued leave" },
-    { "id": "UL", "name": "Unpaid Leave", "defaultAllocated": 30.0, "description": "Leave without pay (unrestricted)" }
+    { "id": "PL", "name": "Paid Leave", "defaultAllocated": 1.0, "description": "1 day monthly accrual with carry-forward" }
 ]
+
+
+# ====================================================================
+# UTILITY FUNCTIONS & AUTH HELPERS (HMAC-SHA256 JWT)
+# ====================================================================
 
 def get_now():
     """Return timezone-aware UTC datetime or fallback to utcnow"""
@@ -119,6 +111,135 @@ def find_employee(identifier):
         return Employee.query.filter((Employee.employee_id == ident_str) | (Employee.id == int(ident_str))).first()
     return Employee.query.filter_by(employee_id=ident_str).first()
 
+def base64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode('utf-8').rstrip('=')
+
+def base64url_decode(data: str) -> bytes:
+    padding = '=' * ((4 - len(data) % 4) % 4)
+    return base64.urlsafe_b64decode(data + padding)
+
+def generate_token(user, expires_in=86400 * 7):
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "sub": user.id,
+        "username": user.username,
+        "role": user.role,
+        "employee_id": user.employee_id,
+        "exp": int(time.time()) + expires_in
+    }
+    enc_h = base64url_encode(json.dumps(header).encode('utf-8'))
+    enc_p = base64url_encode(json.dumps(payload).encode('utf-8'))
+    sig = hmac.new(SECRET_KEY, f"{enc_h}.{enc_p}".encode('utf-8'), hashlib.sha256).digest()
+    return f"{enc_h}.{enc_p}.{base64url_encode(sig)}"
+
+def verify_token(token_str):
+    try:
+        parts = token_str.split('.')
+        if len(parts) != 3:
+            return None
+        enc_h, enc_p, enc_s = parts
+        expected_sig = hmac.new(SECRET_KEY, f"{enc_h}.{enc_p}".encode('utf-8'), hashlib.sha256).digest()
+        actual_sig = base64url_decode(enc_s)
+        if not hmac.compare_digest(expected_sig, actual_sig):
+            return None
+        payload = json.loads(base64url_decode(enc_p).decode('utf-8'))
+        if int(payload.get('exp', 0)) < int(time.time()):
+            return None
+        return payload
+    except Exception:
+        return None
+
+def token_required(optional=False):
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            auth_header = request.headers.get('Authorization', '')
+            token = None
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(' ', 1)[1].strip()
+            elif 'token' in request.args:
+                token = request.args.get('token')
+
+            if not token:
+                if optional:
+                    request.current_user = None
+                    return f(*args, **kwargs)
+                return jsonify({"success": False, "message": "Authentication token missing. Please log in."}), 401
+
+            payload = verify_token(token)
+            if not payload:
+                if optional:
+                    request.current_user = None
+                    return f(*args, **kwargs)
+                return jsonify({"success": False, "message": "Invalid or expired authentication token. Please log in again."}), 401
+
+            user = db.session.get(User, payload['sub'])
+            if not user or not user.is_active:
+                return jsonify({"success": False, "message": "User account is inactive or not found."}), 401
+
+            request.current_user = user
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+def role_required(*allowed_roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            user = getattr(request, 'current_user', None)
+            if not user:
+                return jsonify({"success": False, "message": "Authentication required."}), 401
+            if user.role not in allowed_roles:
+                return jsonify({
+                    "success": False,
+                    "message": f"Access denied. Required role: {', '.join(allowed_roles)}. Your role is {user.role}."
+                }), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+def sync_monthly_accrual(emp_id):
+    """
+    Ensure employee has single 'Paid Leave' balance and accrues +1 per elapsed calendar month.
+    Unused leave carries forward month-over-month.
+    """
+    now = datetime.now()
+    current_month_str = now.strftime("%Y-%m")
+
+    bal = LeaveBalance.query.filter_by(employee_id=emp_id, leave_type="Paid Leave").first()
+    if not bal:
+        bal = LeaveBalance(
+            employee_id=emp_id,
+            leave_type="Paid Leave",
+            total=1.0,
+            used=0.0,
+            pending=0.0,
+            available=1.0,
+            last_accrual_month=current_month_str
+        )
+        db.session.add(bal)
+        db.session.commit()
+        return bal
+
+    if not bal.last_accrual_month:
+        bal.last_accrual_month = current_month_str
+        db.session.commit()
+        return bal
+
+    try:
+        last_y, last_m = map(int, bal.last_accrual_month.split('-'))
+        months_diff = (now.year - last_y) * 12 + (now.month - last_m)
+        if months_diff > 0:
+            bal.total = (bal.total or 0.0) + (months_diff * 1.0)
+            bal.available = max(0.0, (bal.total or 0.0) - (bal.used or 0.0) - (bal.pending or 0.0))
+            bal.last_accrual_month = current_month_str
+            db.session.commit()
+    except Exception as e:
+        print(f"[Accrual Sync Error] for {emp_id}: {e}")
+        db.session.rollback()
+
+    return bal
+
 def check_schema_upgrades():
     """Safely add any missing columns in existing SQLite tables without wiping data"""
     try:
@@ -130,6 +251,11 @@ def check_schema_upgrades():
             if 'rejection_reason' not in cols:
                 db.session.execute(text("ALTER TABLE leave_requests ADD COLUMN rejection_reason TEXT DEFAULT ''"))
             db.session.commit()
+        if 'leave_balances' in inspector.get_table_names():
+            lb_cols = [c['name'] for c in inspector.get_columns('leave_balances')]
+            if 'last_accrual_month' not in lb_cols:
+                db.session.execute(text("ALTER TABLE leave_balances ADD COLUMN last_accrual_month VARCHAR(7)"))
+                db.session.commit()
     except Exception as e:
         db.session.rollback()
         print(f"[Schema check note] {e}")
@@ -146,50 +272,89 @@ def init_db():
             db.session.commit()
             print("[Init] Seeded official corporate holidays.")
 
-        # Seed employees and balances only if fresh DB
-        if Employee.query.count() == 0:
-            for item in SEED_EMPLOYEES:
-                emp = Employee(**item)
-                db.session.add(emp)
-                # Seed default leave balances
-                for lt in DEFAULT_LEAVE_TYPES:
-                    bal = LeaveBalance(
-                        employee_id=emp.employee_id,
-                        leave_type=lt["name"],
-                        total=lt["defaultAllocated"],
-                        used=0.0,
-                        pending=0.0,
-                        available=lt["defaultAllocated"]
-                    )
-                    db.session.add(bal)
-
-            # Seed 2 demo leave requests
-            db.session.add(LeaveRequest(
-                employee_id="428",
-                leave_type="Casual Leave",
-                start_date="2026-08-10",
-                end_date="2026-08-12",
-                reason="Family function attendance in hometown",
-                status="APPROVED",
-                days_count=3.0,
-                applied_on="2026-08-01",
-                approved_by="Varun Sharma (Admin)"
-            ))
-            db.session.add(LeaveRequest(
-                employee_id="411",
-                leave_type="Sick Leave",
-                start_date="2026-08-18",
-                end_date="2026-08-19",
-                reason="Viral fever recuperation",
-                status="PENDING",
-                days_count=2.0,
-                applied_on="2026-08-17"
-            ))
-            db.session.commit()
-            print("[Init] Database initialized with baseline employees, leave balances, and sample requests.")
-
 # Initialize database on app startup
 init_db()
+
+
+# ====================================================================
+# AUTHENTICATION ENDPOINTS
+# ====================================================================
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    data = request.get_json() or {}
+    ident = str(data.get('username') or data.get('identifier') or data.get('email', '')).strip()
+    password = str(data.get('password', '')).strip()
+
+    if not ident or not password:
+        return jsonify({"success": False, "message": "Username/Email and Password are required."}), 400
+
+    # Search by username, email, or employee_id
+    user = User.query.filter(
+        (User.username.ilike(ident)) |
+        (User.email.ilike(ident)) |
+        (User.employee_id.ilike(ident))
+    ).first()
+
+    if not user or not user.check_password(password):
+        return jsonify({"success": False, "message": "Invalid username or password."}), 401
+
+    if not user.is_active:
+        return jsonify({"success": False, "message": "User account is inactive. Please contact your manager."}), 403
+
+    token = generate_token(user)
+    return jsonify({
+        "success": True,
+        "token": token,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email or "",
+            "role": user.role,
+            "employeeId": user.employee_id,
+            "fullName": user.full_name
+        }
+    })
+
+
+@app.route('/api/auth/me', methods=['GET'])
+@token_required()
+def auth_me():
+    user = request.current_user
+    return jsonify({
+        "success": True,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email or "",
+            "role": user.role,
+            "employeeId": user.employee_id,
+            "fullName": user.full_name
+        }
+    })
+
+
+@app.route('/api/auth/change-password', methods=['POST'])
+@token_required()
+def auth_change_password():
+    user = request.current_user
+    data = request.get_json() or {}
+    old_pw = str(data.get('oldPassword', '')).strip()
+    new_pw = str(data.get('newPassword', '')).strip()
+
+    if not old_pw or not new_pw:
+        return jsonify({"success": False, "message": "Current password and new password are required."}), 400
+
+    if not user.check_password(old_pw):
+        return jsonify({"success": False, "message": "Current password is incorrect."}), 400
+
+    if len(new_pw) < 4:
+        return jsonify({"success": False, "message": "New password must be at least 4 characters."}), 400
+
+    user.set_password(new_pw)
+    user.updated_at = get_now()
+    db.session.commit()
+    return jsonify({"success": True, "message": "Password changed successfully."})
 
 
 # ====================================================================
@@ -206,21 +371,27 @@ def health_check():
 
 
 # ====================================================================
-# EMPLOYEE API ENDPOINTS
+# EMPLOYEE API ENDPOINTS (RBAC PRIVACY PROTECTED)
 # ====================================================================
 
 @app.route('/api/employees', methods=['GET'])
+@token_required()
 def get_employees():
+    current_user = request.current_user
     query = request.args.get('query', '').strip().lower()
     department = request.args.get('department', '').strip()
     status = request.args.get('status', '').strip()
 
     q = Employee.query
 
-    if department and department != "All":
-        q = q.filter(Employee.department == department)
-    if status and status != "All":
-        q = q.filter(Employee.status == status)
+    # Privacy Enforcement: EMPLOYEE can only view their own profile
+    if current_user.role == 'EMPLOYEE':
+        q = q.filter(Employee.employee_id == current_user.employee_id)
+    else:
+        if department and department != "All":
+            q = q.filter(Employee.department == department)
+        if status and status != "All":
+            q = q.filter(Employee.status == status)
 
     employees = q.order_by(Employee.id.asc()).all()
 
@@ -238,6 +409,8 @@ def get_employees():
 
 
 @app.route('/api/employees', methods=['POST'])
+@token_required()
+@role_required('MANAGER')
 def add_employee():
     data = request.get_json() or {}
 
@@ -263,17 +436,8 @@ def add_employee():
     if not full_name:
         errors['full_name'] = "Full Name is required."
 
-    if not email:
-        errors['email'] = "Email is required."
-    elif not re.match(EMAIL_REGEX, email):
+    if email and not re.match(EMAIL_REGEX, email):
         errors['email'] = "Please enter a valid email address."
-
-    if not department:
-        errors['department'] = "Department is required."
-    if not designation:
-        errors['designation'] = "Designation is required."
-    if not joining_date:
-        errors['joining_date'] = "Joining Date is required."
 
     if errors:
         return jsonify({"success": False, "errors": errors, "message": "Validation failed"}), 400
@@ -292,26 +456,48 @@ def add_employee():
     )
     db.session.add(new_emp)
 
-    # Automatically initialize standard leave balances
-    for lt in DEFAULT_LEAVE_TYPES:
-        db.session.add(LeaveBalance(
-            employee_id=emp_id,
-            leave_type=lt["name"],
-            total=lt["defaultAllocated"],
-            used=0.0,
-            pending=0.0,
-            available=lt["defaultAllocated"]
-        ))
+    # Initialize Paid Leave balance with 1.0 day initial entitlement
+    current_month = datetime.now().strftime("%Y-%m")
+    db.session.add(LeaveBalance(
+        employee_id=emp_id,
+        leave_type="Paid Leave",
+        total=1.0,
+        used=0.0,
+        pending=0.0,
+        available=1.0,
+        last_accrual_month=current_month
+    ))
+
+    # Auto-provision corresponding user account for employee login
+    emp_user = User(
+        username=emp_id,
+        email=email if email else None,
+        role='EMPLOYEE',
+        full_name=full_name,
+        employee_id=emp_id,
+        is_active=True
+    )
+    emp_user.set_password(emp_id)
+    db.session.add(emp_user)
 
     db.session.commit()
     return jsonify({"success": True, "message": f"Employee {emp_id} added successfully.", "data": new_emp.to_dict()}), 201
 
 
 @app.route('/api/employees/<identifier>', methods=['GET'])
+@token_required()
 def get_employee_details(identifier):
+    current_user = request.current_user
     emp = find_employee(identifier)
     if not emp:
         return jsonify({"success": False, "message": f"Employee '{identifier}' not found."}), 404
+
+    # Privacy Enforcement: EMPLOYEE can only view their own details
+    if current_user.role == 'EMPLOYEE' and emp.employee_id != current_user.employee_id:
+        return jsonify({"success": False, "message": "Access denied. You can only view your own records."}), 403
+
+    # Sync monthly accrual for this employee
+    sync_monthly_accrual(emp.employee_id)
 
     records = AttendanceRecord.query.filter_by(employee_id=emp.employee_id).all()
     total_present = sum(1 for r in records if "PRESENT" in (r.status or "").upper())
@@ -329,7 +515,7 @@ def get_employee_details(identifier):
     rejected_leave = sum(1 for l in leaves if l.status == "REJECTED")
 
     balances = LeaveBalance.query.filter_by(employee_id=emp.employee_id).all()
-    remaining_balance = sum(b.available for b in balances)
+    remaining_balance = sum(max(0.0, b.available or 0.0) for b in balances)
 
     recent_attendance = [
         r.to_dict() for r in AttendanceRecord.query.filter_by(employee_id=emp.employee_id).order_by(AttendanceRecord.date.desc()).limit(8).all()
@@ -364,6 +550,8 @@ def get_employee_details(identifier):
 
 
 @app.route('/api/employees/<identifier>', methods=['PUT'])
+@token_required()
+@role_required('MANAGER')
 def update_employee(identifier):
     emp = find_employee(identifier)
     if not emp:
@@ -371,13 +559,29 @@ def update_employee(identifier):
 
     data = request.get_json() or {}
 
+    # Support updating employee_id with cascade to related records
+    if 'employee_id' in data:
+        new_emp_id = str(data['employee_id']).strip()
+        if new_emp_id and new_emp_id != emp.employee_id:
+            existing = Employee.query.filter(Employee.employee_id == new_emp_id, Employee.id != emp.id).first()
+            if existing:
+                return jsonify({"success": False, "errors": {"employee_id": f"Employee ID '{new_emp_id}' is already in use."}}), 400
+            old_emp_id = emp.employee_id
+            AttendanceRecord.query.filter_by(employee_id=old_emp_id).update({"employee_id": new_emp_id})
+            LeaveRequest.query.filter_by(employee_id=old_emp_id).update({"employee_id": new_emp_id})
+            LeaveBalance.query.filter_by(employee_id=old_emp_id).update({"employee_id": new_emp_id})
+            User.query.filter_by(employee_id=old_emp_id).update({"employee_id": new_emp_id, "username": new_emp_id})
+            emp.employee_id = new_emp_id
+
     if 'full_name' in data:
         emp.full_name = str(data['full_name']).strip()
+        User.query.filter_by(employee_id=emp.employee_id).update({"full_name": emp.full_name})
     if 'email' in data:
         email = str(data['email']).strip()
-        if not re.match(EMAIL_REGEX, email):
+        if email and not re.match(EMAIL_REGEX, email):
             return jsonify({"success": False, "errors": {"email": "Invalid email address."}}), 400
         emp.email = email
+        User.query.filter_by(employee_id=emp.employee_id).update({"email": email})
     if 'phone' in data:
         emp.phone = str(data['phone']).strip()
     if 'department' in data:
@@ -399,6 +603,8 @@ def update_employee(identifier):
 
 
 @app.route('/api/employees/<identifier>/status', methods=['PATCH'])
+@token_required()
+@role_required('MANAGER')
 def toggle_employee_status(identifier):
     emp = find_employee(identifier)
     if not emp:
@@ -411,11 +617,14 @@ def toggle_employee_status(identifier):
 
     emp.status = new_status
     emp.updated_at = get_now()
+    User.query.filter_by(employee_id=emp.employee_id).update({"is_active": (new_status == "Active")})
     db.session.commit()
     return jsonify({"success": True, "message": f"Status updated to {new_status}.", "status": new_status, "data": emp.to_dict()})
 
 
 @app.route('/api/employees/<identifier>', methods=['DELETE'])
+@token_required()
+@role_required('MANAGER')
 def delete_employee(identifier):
     emp = find_employee(identifier)
     if not emp:
@@ -425,19 +634,28 @@ def delete_employee(identifier):
     AttendanceRecord.query.filter_by(employee_id=emp_id).delete()
     LeaveRequest.query.filter_by(employee_id=emp_id).delete()
     LeaveBalance.query.filter_by(employee_id=emp_id).delete()
+    User.query.filter_by(employee_id=emp_id).delete()
     db.session.delete(emp)
     db.session.commit()
     return jsonify({"success": True, "message": f"Employee {emp_id} and associated records removed."})
 
 
 # ====================================================================
-# ATTENDANCE ENDPOINTS
+# ATTENDANCE ENDPOINTS (RBAC PRIVACY PROTECTED)
 # ====================================================================
 
 @app.route('/api/attendance', methods=['GET'])
+@token_required()
 def get_attendance():
+    current_user = request.current_user
     emp_id = request.args.get('employee_id')
     date_filter = request.args.get('date')
+
+    # Privacy Enforcement: EMPLOYEE can only view their own attendance
+    if current_user.role == 'EMPLOYEE':
+        if emp_id and emp_id != current_user.employee_id:
+            return jsonify({"success": False, "message": "Access denied. You can only view your own attendance."}), 403
+        emp_id = current_user.employee_id
 
     q = AttendanceRecord.query
     if emp_id:
@@ -450,6 +668,8 @@ def get_attendance():
 
 
 @app.route('/api/attendance/ingest', methods=['POST'])
+@token_required()
+@role_required('MANAGER')
 def ingest_attendance():
     data = request.get_json() or {}
     records = data.get('records', [])
@@ -514,7 +734,7 @@ def ingest_attendance():
 
 
 # ====================================================================
-# LEAVE MANAGEMENT ENDPOINTS
+# LEAVE MANAGEMENT ENDPOINTS (SINGLE "Paid Leave" POLICY)
 # ====================================================================
 
 @app.route('/api/leave-types', methods=['GET'])
@@ -526,31 +746,47 @@ def get_leave_types():
 
 
 @app.route('/api/leave-balances/<employee_id>', methods=['GET'])
+@token_required()
 def get_employee_leave_balances(employee_id):
+    current_user = request.current_user
     emp = find_employee(employee_id)
     if not emp:
         return jsonify({"success": False, "message": f"Employee '{employee_id}' not found."}), 404
 
+    # Privacy Enforcement: EMPLOYEE can only view their own leave balance
+    if current_user.role == 'EMPLOYEE' and emp.employee_id != current_user.employee_id:
+        return jsonify({"success": False, "message": "Access denied. You can only view your own leave balance."}), 403
+
+    # Sync monthly accrual for employee
+    sync_monthly_accrual(emp.employee_id)
+
     balances = LeaveBalance.query.filter_by(employee_id=emp.employee_id).all()
-    # Format as a map { [typeName]: { allocated, used, remaining, pending } }
     balances_dict = {}
     for b in balances:
+        facing_avail = max(0.0, float(b.available or 0.0))
         balances_dict[b.leave_type] = {
             "allocated": b.total,
+            "total": b.total,
+            "accrued": b.total,
             "used": b.used,
             "pending": b.pending,
-            "remaining": b.available
+            "remaining": facing_avail,
+            "available": facing_avail,
+            "lastAccrualMonth": b.last_accrual_month or ""
         }
 
-    # Ensure all default types exist in the map
-    for lt in DEFAULT_LEAVE_TYPES:
-        if lt["name"] not in balances_dict:
-            balances_dict[lt["name"]] = {
-                "allocated": lt["defaultAllocated"],
-                "used": 0.0,
-                "pending": 0.0,
-                "remaining": lt["defaultAllocated"]
-            }
+    # Ensure Paid Leave is always represented
+    if "Paid Leave" not in balances_dict:
+        balances_dict["Paid Leave"] = {
+            "allocated": 1.0,
+            "total": 1.0,
+            "accrued": 1.0,
+            "used": 0.0,
+            "pending": 0.0,
+            "remaining": 1.0,
+            "available": 1.0,
+            "lastAccrualMonth": datetime.now().strftime("%Y-%m")
+        }
 
     return jsonify({
         "success": True,
@@ -561,9 +797,17 @@ def get_employee_leave_balances(employee_id):
 
 
 @app.route('/api/leaves', methods=['GET'])
+@token_required()
 def get_leaves():
+    current_user = request.current_user
     emp_id = request.args.get('employee_id')
     status = request.args.get('status')
+
+    # Privacy Enforcement: EMPLOYEE can only see their own leave requests
+    if current_user.role == 'EMPLOYEE':
+        if emp_id and emp_id != current_user.employee_id:
+            return jsonify({"success": False, "message": "Access denied. You can only view your own leave requests."}), 403
+        emp_id = current_user.employee_id
 
     q = LeaveRequest.query
     if emp_id:
@@ -584,41 +828,60 @@ def get_leaves():
 
 
 @app.route('/api/leaves', methods=['POST'])
+@token_required()
 def apply_leave():
+    current_user = request.current_user
     data = request.get_json() or {}
     emp_id = str(data.get('employeeId') or data.get('employee_id', '')).strip()
+
+    # Privacy Enforcement: EMPLOYEE can only apply for themselves
+    if current_user.role == 'EMPLOYEE':
+        emp_id = current_user.employee_id
+    elif not emp_id:
+        emp_id = current_user.employee_id or ""
 
     emp = find_employee(emp_id)
     if not emp:
         return jsonify({"success": False, "message": f"Employee '{emp_id}' does not exist."}), 400
 
-    leave_type = data.get('leaveType') or data.get('leave_type')
+    # Ensure monthly accrual is up to date
+    bal = sync_monthly_accrual(emp.employee_id)
+
+    # In our company leave policy, leave type is always Paid Leave
+    leave_type = data.get('leaveType') or data.get('leave_type') or "Paid Leave"
+    if leave_type != "Paid Leave":
+        leave_type = "Paid Leave"
+
     start_date = data.get('startDate') or data.get('start_date')
     end_date = data.get('endDate') or data.get('end_date')
     reason = data.get('reason', '')
     days_count = safe_float(data.get('daysCount') or data.get('days') or data.get('days_count'), 1.0)
 
-    if not leave_type or not start_date or not end_date or not reason:
-        return jsonify({"success": False, "message": "All leave fields are required."}), 400
+    if not start_date or not end_date or not reason:
+        return jsonify({"success": False, "message": "Start date, end date, and reason are required."}), 400
 
+    if days_count <= 0:
+        return jsonify({"success": False, "message": "Days requested must be greater than 0."}), 400
+
+    # Note: Per company policy, employees may request leave exceeding available balance;
+    # The request is placed in PENDING status for Manager decision.
     req = LeaveRequest(
         employee_id=emp.employee_id,
-        leave_type=leave_type,
+        leave_type="Paid Leave",
         start_date=start_date,
         end_date=end_date,
         reason=reason,
         status="PENDING",
         days_count=days_count,
-        applied_on=get_now().strftime("%Y-%m-%d"),
+        applied_on=datetime.now().strftime("%Y-%m-%d"),
         approved_by="",
         rejection_reason=""
     )
     db.session.add(req)
 
-    # Adjust pending leave balance in DB
-    bal = LeaveBalance.query.filter_by(employee_id=emp.employee_id, leave_type=leave_type).first()
-    if bal:
-        bal.pending = (bal.pending or 0.0) + days_count
+    # Adjust pending balance
+    bal.pending = (bal.pending or 0.0) + days_count
+    bal.available = max(0.0, (bal.total or 0.0) - (bal.used or 0.0) - bal.pending)
 
     db.session.commit()
 
@@ -630,7 +893,10 @@ def apply_leave():
 
 
 @app.route('/api/leaves/<int:leave_id>', methods=['PATCH'])
+@token_required()
+@role_required('MANAGER')
 def update_leave_status(leave_id):
+    current_user = request.current_user
     req = db.session.get(LeaveRequest, leave_id)
     if not req:
         return jsonify({"success": False, "message": "Leave request not found."}), 404
@@ -643,11 +909,12 @@ def update_leave_status(leave_id):
     old_status = req.status
     req.status = new_status
 
+    approver_name = current_user.full_name or current_user.username
     if new_status == "APPROVED":
-        req.approved_by = data.get('approvedBy') or data.get('approved_by') or "Admin"
+        req.approved_by = data.get('approvedBy') or data.get('approved_by') or approver_name
         req.rejection_reason = ""
     elif new_status == "REJECTED":
-        req.approved_by = data.get('approvedBy') or data.get('approved_by') or "Admin"
+        req.approved_by = data.get('approvedBy') or data.get('approved_by') or approver_name
         req.rejection_reason = data.get('rejectionReason') or data.get('reason') or "Operational requirements"
 
     # Maintain single source of truth for LeaveBalance
@@ -657,12 +924,13 @@ def update_leave_status(leave_id):
         if old_status == "PENDING" and new_status == "APPROVED":
             bal.pending = max(0.0, (bal.pending or 0.0) - days)
             bal.used = (bal.used or 0.0) + days
-            bal.available = max(0.0, (bal.total or 0.0) - bal.used)
+            bal.available = max(0.0, (bal.total or 0.0) - (bal.used or 0.0) - (bal.pending or 0.0))
         elif old_status == "PENDING" and new_status in ["REJECTED", "CANCELLED"]:
             bal.pending = max(0.0, (bal.pending or 0.0) - days)
+            bal.available = max(0.0, (bal.total or 0.0) - (bal.used or 0.0) - (bal.pending or 0.0))
         elif old_status == "APPROVED" and new_status in ["REJECTED", "CANCELLED"]:
             bal.used = max(0.0, (bal.used or 0.0) - days)
-            bal.available = max(0.0, (bal.total or 0.0) - bal.used)
+            bal.available = max(0.0, (bal.total or 0.0) - (bal.used or 0.0) - (bal.pending or 0.0))
 
     db.session.commit()
 
@@ -675,24 +943,44 @@ def update_leave_status(leave_id):
 
 
 @app.route('/api/leaves/<int:leave_id>', methods=['DELETE'])
+@token_required()
 def delete_or_cancel_leave(leave_id):
+    current_user = request.current_user
     req = db.session.get(LeaveRequest, leave_id)
     if not req:
         return jsonify({"success": False, "message": "Leave request not found."}), 404
 
-    # Release pending balance if still pending
+    # Permission check:
+    # EMPLOYEE can only cancel their own PENDING request.
+    # MANAGER can delete any leave.
+    # ACCOUNTANT cannot delete or modify leave requests.
+    if current_user.role == 'EMPLOYEE':
+        if req.employee_id != current_user.employee_id:
+            return jsonify({"success": False, "message": "Access denied. You can only cancel your own leave requests."}), 403
+        if req.status != "PENDING":
+            return jsonify({"success": False, "message": "You can only cancel leaves that are in PENDING status."}), 400
+    elif current_user.role == 'ACCOUNTANT':
+        return jsonify({"success": False, "message": "Access denied. Accountants cannot delete leave requests."}), 403
+
+    # Release pending balance if pending
     if req.status == "PENDING":
         bal = LeaveBalance.query.filter_by(employee_id=req.employee_id, leave_type=req.leave_type).first()
         if bal:
             bal.pending = max(0.0, (bal.pending or 0.0) - (req.days_count or 1.0))
+            bal.available = max(0.0, (bal.total or 0.0) - (bal.used or 0.0) - bal.pending)
+    elif req.status == "APPROVED":
+        bal = LeaveBalance.query.filter_by(employee_id=req.employee_id, leave_type=req.leave_type).first()
+        if bal:
+            bal.used = max(0.0, (bal.used or 0.0) - (req.days_count or 1.0))
+            bal.available = max(0.0, (bal.total or 0.0) - bal.used)
 
     db.session.delete(req)
     db.session.commit()
-    return jsonify({"success": True, "message": f"Leave request {leave_id} deleted."})
+    return jsonify({"success": True, "message": f"Leave request {leave_id} cancelled/deleted."})
 
 
 # ====================================================================
-# HOLIDAYS API ENDPOINTS (CENTRALIZED SINGLE SOURCE OF TRUTH)
+# HOLIDAYS API ENDPOINTS
 # ====================================================================
 
 @app.route('/api/holidays', methods=['GET'])
@@ -706,6 +994,8 @@ def get_holidays():
 
 
 @app.route('/api/holidays', methods=['POST'])
+@token_required()
+@role_required('MANAGER')
 def add_holiday():
     data = request.get_json() or {}
     name = str(data.get('name', '')).strip()
@@ -727,6 +1017,8 @@ def add_holiday():
 
 
 @app.route('/api/holidays/<holiday_id>', methods=['PUT'])
+@token_required()
+@role_required('MANAGER')
 def update_holiday(holiday_id):
     holiday = db.session.get(Holiday, holiday_id)
     if not holiday:
@@ -745,6 +1037,8 @@ def update_holiday(holiday_id):
 
 
 @app.route('/api/holidays/<holiday_id>', methods=['DELETE'])
+@token_required()
+@role_required('MANAGER')
 def delete_holiday(holiday_id):
     holiday = db.session.get(Holiday, holiday_id)
     if not holiday:
@@ -756,11 +1050,48 @@ def delete_holiday(holiday_id):
 
 
 # ====================================================================
-# DASHBOARD STATS ENDPOINT
+# DASHBOARD STATS ENDPOINT (ROLE AWARE)
 # ====================================================================
 
 @app.route('/api/dashboard/stats', methods=['GET'])
+@token_required()
 def get_dashboard_stats():
+    current_user = request.current_user
+
+    if current_user.role == 'EMPLOYEE':
+        # Employee sees only their own metrics
+        records = AttendanceRecord.query.filter_by(employee_id=current_user.employee_id).all()
+        full_day_count = sum(1 for r in records if (r.status or "").strip().upper() == "FULL DAY PRESENT")
+        morning_half_count = sum(1 for r in records if "MORNING" in (r.status or "").upper())
+        afternoon_half_count = sum(1 for r in records if "AFTERNOON" in (r.status or "").upper())
+        on_leave_count = sum(1 for r in records if (r.status or "").strip().upper() == "ON LEAVE")
+        absent_count = sum(1 for r in records if (r.status or "").strip().upper() == "ABSENT")
+        late_list = [r for r in records if (r.late_minutes or 0) > 0]
+        total_late_mins = sum(r.late_minutes or 0 for r in late_list)
+
+        pending_leaves = LeaveRequest.query.filter_by(employee_id=current_user.employee_id, status="PENDING").count()
+        approved_leaves = LeaveRequest.query.filter_by(employee_id=current_user.employee_id, status="APPROVED").count()
+
+        bal = sync_monthly_accrual(current_user.employee_id)
+
+        return jsonify({
+            "success": True,
+            "totalStaff": 1,
+            "allStaffCount": 1,
+            "fullDayPresent": full_day_count,
+            "morningHalf": morning_half_count,
+            "afternoonHalf": afternoon_half_count,
+            "onLeave": on_leave_count,
+            "absentDays": absent_count,
+            "lateIncidents": len(late_list),
+            "totalLateMinutes": total_late_mins,
+            "pendingLeaves": pending_leaves,
+            "approvedLeaves": approved_leaves,
+            "leaveBalance": bal.available if bal else 1.0,
+            "totalRecords": len(records)
+        })
+
+    # MANAGER or ACCOUNTANT: Company-wide metrics
     active_staff_count = Employee.query.filter_by(status='Active').count()
     total_staff_count = Employee.query.count()
 
